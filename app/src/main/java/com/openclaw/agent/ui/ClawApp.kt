@@ -10,12 +10,14 @@ import com.openclaw.agent.ui.chat.ChatScreen
 import com.openclaw.agent.ui.memory.MemoryScreen
 import com.openclaw.agent.ui.sessions.SessionListScreen
 import com.openclaw.agent.ui.settings.SettingsScreen
+import com.openclaw.agent.ui.skills.SkillsScreen
 
 object Routes {
     const val SESSIONS = "sessions"
     const val CHAT = "chat/{sessionId}"
     const val SETTINGS = "settings"
     const val MEMORY = "memory"
+    const val SKILLS = "skills"
 
     fun chat(sessionId: String) = "chat/$sessionId"
 }
@@ -38,6 +40,9 @@ fun ClawApp() {
                 },
                 onMemoryClick = {
                     navController.navigate(Routes.MEMORY)
+                },
+                onSkillsClick = {
+                    navController.navigate(Routes.SKILLS)
                 }
             )
         }
@@ -59,6 +64,10 @@ fun ClawApp() {
 
         composable(Routes.MEMORY) {
             MemoryScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.SKILLS) {
+            SkillsScreen(onBack = { navController.popBackStack() })
         }
     }
 }

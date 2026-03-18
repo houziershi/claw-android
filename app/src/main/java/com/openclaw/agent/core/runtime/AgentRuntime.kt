@@ -4,6 +4,7 @@ import android.util.Log
 import com.openclaw.agent.core.llm.*
 import com.openclaw.agent.core.memory.MemoryContextBuilder
 import com.openclaw.agent.core.memory.MemoryStore
+import com.openclaw.agent.core.skill.SkillEngine
 import com.openclaw.agent.core.tools.ToolRegistry
 import com.openclaw.agent.core.tools.ToolRouter
 import com.openclaw.agent.data.db.MessageDao
@@ -26,6 +27,7 @@ class AgentRuntime @Inject constructor(
     private val settingsStore: SettingsStore,
     private val memoryContextBuilder: MemoryContextBuilder,
     private val memoryStore: MemoryStore,
+    private val skillEngine: SkillEngine,
     private val sessionDao: SessionDao,
     private val messageDao: MessageDao,
     private val toolRegistry: ToolRegistry,
@@ -60,8 +62,15 @@ class AgentRuntime @Inject constructor(
         messageDao.insertMessage(userMsgEntity)
         sessionDao.incrementMessageCount(sessionId, System.currentTimeMillis())
 
-        // Build system prompt with memory context
-        val systemPrompt = memoryContextBuilder.buildSystemPrompt(lastUserMessage = userMessage)
+        // Match skill for this message
+        val matchedSkill = skillEngine.matchSkill(userMessage)
+        val skillContext = matchedSkill?.let { skillEngine.buildSkillContext(it) }
+
+        // Build system prompt with memory context + skill context
+        val systemPrompt = memoryContextBuilder.buildSystemPrompt(
+            lastUserMessage = userMessage,
+            skillContext = skillContext
+        )
 
         // Build conversation history from DB
         val dbMessages = messageDao.getMessagesForSessionOnce(sessionId)

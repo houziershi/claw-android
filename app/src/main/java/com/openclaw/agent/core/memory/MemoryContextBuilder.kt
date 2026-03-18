@@ -23,11 +23,13 @@ class MemoryContextBuilder @Inject constructor(
      * 4. Recent daily notes
      * 5. Relevant memory snippets (keyword search)
      * 6. Current time + device info
-     * 7. Memory usage instructions
+     * 7. Active skill context (if matched)
+     * 8. Memory usage instructions
      */
     suspend fun buildSystemPrompt(
         lastUserMessage: String = "",
-        customPrompt: String? = null
+        customPrompt: String? = null,
+        skillContext: String? = null
     ): String = buildString {
         // Custom prompt override (if set in Settings)
         if (customPrompt != null) {
@@ -88,7 +90,13 @@ class MemoryContextBuilder @Inject constructor(
         appendLine("Device Model: ${Build.MANUFACTURER} ${Build.MODEL}")
         appendLine()
 
-        // 7. Memory usage instructions
+        // 7. Active skill context (if matched)
+        if (!skillContext.isNullOrBlank()) {
+            appendLine(skillContext)
+            appendLine()
+        }
+
+        // 8. Memory usage instructions
         appendLine("## Memory Instructions")
         appendLine("You have memory tools to persist important information:")
         appendLine("- Use `memory_write` to save user preferences, important facts, or notes to MEMORY.md or USER.md")

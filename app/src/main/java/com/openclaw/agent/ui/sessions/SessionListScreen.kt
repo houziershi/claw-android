@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
@@ -25,6 +26,7 @@ fun SessionListScreen(
     onSessionClick: (String) -> Unit,
     onSettingsClick: () -> Unit,
     onMemoryClick: () -> Unit,
+    onSkillsClick: () -> Unit = {},
     viewModel: SessionListViewModel = hiltViewModel()
 ) {
     val sessions by viewModel.sessions.collectAsState(initial = emptyList())
@@ -34,6 +36,9 @@ fun SessionListScreen(
             TopAppBar(
                 title = { Text("Claw") },
                 actions = {
+                    IconButton(onClick = onSkillsClick) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "Skills")
+                    }
                     IconButton(onClick = onMemoryClick) {
                         Icon(Icons.Default.Book, contentDescription = "Memory")
                     }
