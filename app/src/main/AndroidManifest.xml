@@ -27,6 +27,11 @@
     <!-- Alarm -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- Notification (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Microphone (Voice input / STT) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -51,6 +56,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Alarm BroadcastReceiver -->
+        <receiver
+            android:name=".core.tools.impl.AlarmReceiver"
+            android:exported="false" />
 
     </application>
 
