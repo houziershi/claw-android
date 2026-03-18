@@ -3,6 +3,8 @@ package com.openclaw.agent.core.tools.impl
 import android.util.Log
 import com.openclaw.agent.core.tools.Tool
 import com.openclaw.agent.core.tools.ToolResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -36,7 +38,7 @@ class WebSearchTool(private val okHttpClient: OkHttpClient) : Tool {
             success = false, content = "", errorMessage = "Missing 'query' parameter"
         )
 
-        return try {
+        return withContext(Dispatchers.IO) { try {
             // Use DuckDuckGo HTML search (no API key needed)
             val url = "https://html.duckduckgo.com/html/".toHttpUrl().newBuilder()
                 .addQueryParameter("q", query)
@@ -65,7 +67,7 @@ class WebSearchTool(private val okHttpClient: OkHttpClient) : Tool {
         } catch (e: Exception) {
             Log.e(TAG, "Search failed", e)
             ToolResult(success = false, content = "", errorMessage = "Search failed: ${e.message}")
-        }
+        } }
     }
 
     private fun parseSearchResults(html: String): List<Triple<String, String, String>> {
