@@ -226,7 +226,7 @@ class AlarmTool(private val context: Context) : Tool {
 
             ToolResult(
                 success = true,
-                content = "Alarm at %02d:%02d deleted.".format(hour, minute)
+                content = "Claw notification for %02d:%02d cancelled. Note: system Clock app alarms cannot be deleted from background — user may need to manually delete them in the Clock app.".format(hour, minute)
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to delete alarm", e)
