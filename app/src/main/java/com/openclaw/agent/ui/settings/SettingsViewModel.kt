@@ -34,7 +34,13 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val selectedModel: Flow<String> = settingsStore.selectedModelFlow
+    val themeMode: Flow<String> = settingsStore.themeModeFlow
     val availableModels = SettingsStore.AVAILABLE_MODELS
+    val themeModes = listOf(
+        "system" to "System Default",
+        "light" to "Light",
+        "dark" to "Dark"
+    )
 
     private val _apiKey = MutableStateFlow(settingsStore.getApiKey())
     val apiKey: StateFlow<String> = _apiKey
@@ -58,6 +64,12 @@ class SettingsViewModel @Inject constructor(
     fun selectModel(modelId: String) {
         viewModelScope.launch {
             settingsStore.saveSelectedModel(modelId)
+        }
+    }
+
+    fun selectTheme(mode: String) {
+        viewModelScope.launch {
+            settingsStore.saveThemeMode(mode)
         }
     }
 

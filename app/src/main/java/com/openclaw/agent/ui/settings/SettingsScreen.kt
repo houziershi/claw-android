@@ -27,6 +27,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val selectedModel by viewModel.selectedModel.collectAsState(initial = "")
+    val themeMode by viewModel.themeMode.collectAsState(initial = "system")
     val apiKey by viewModel.apiKey.collectAsState()
     val baseUrl by viewModel.baseUrl.collectAsState()
     val connectionTestState by viewModel.connectionTestState.collectAsState()
@@ -35,6 +36,7 @@ fun SettingsScreen(
     var baseUrlInput by remember(baseUrl) { mutableStateOf(baseUrl) }
     var showApiKey by remember { mutableStateOf(false) }
     var modelDropdownExpanded by remember { mutableStateOf(false) }
+    var themeDropdownExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -132,6 +134,48 @@ fun SettingsScreen(
                             onClick = {
                                 viewModel.selectModel(modelId)
                                 modelDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider()
+
+            // ── Theme ───────────────────────────────────────────────────────
+            Text("Theme", style = MaterialTheme.typography.titleMedium)
+            ExposedDropdownMenuBox(
+                expanded = themeDropdownExpanded,
+                onExpandedChange = { themeDropdownExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = viewModel.themeModes.find { it.first == themeMode }?.second ?: "System Default",
+                    onValueChange = {},
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    readOnly = true,
+                    label = { Text("Appearance") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeDropdownExpanded) }
+                )
+                ExposedDropdownMenu(
+                    expanded = themeDropdownExpanded,
+                    onDismissRequest = { themeDropdownExpanded = false }
+                ) {
+                    viewModel.themeModes.forEach { (modeId, displayName) ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    when (modeId) {
+                                        "light" -> "☀️  $displayName"
+                                        "dark" -> "🌙  $displayName"
+                                        else -> "📱  $displayName"
+                                    }
+                                )
+                            },
+                            onClick = {
+                                viewModel.selectTheme(modeId)
+                                themeDropdownExpanded = false
                             }
                         )
                     }
@@ -253,7 +297,7 @@ fun SettingsScreen(
             // ── About ──────────────────────────────────────────────────────
             Text("About", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Claw Android v0.1.0\nAn independent AI agent with memory and skills.",
+                "Claw Android v0.5.0\nAn independent AI agent with memory, skills, voice I/O, and dark theme.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
