@@ -114,8 +114,6 @@ class AgentRuntime @Inject constructor(
         val fullAssistantText = StringBuilder()
         var consecutiveToolErrors = 0
         var lastFailedToolName = ""
-        var lastSuccessfulToolCall = ""  // "name:argsHash" to detect duplicate success calls
-        var consecutiveDuplicateSuccess = 0
 
         while (loopCount < MAX_TOOL_LOOPS) {
             loopCount++
@@ -264,7 +262,7 @@ class AgentRuntime @Inject constructor(
                 ToolExecResult(tc, result)
             }
 
-            // Emit tool finished events + detect repeated failures AND duplicate successes
+            // Emit tool finished events + detect repeated failures
             val allFailed = execResults.all { !it.result.success }
             val failedToolNames = execResults.filter { !it.result.success }.map { it.tc.name }
             
@@ -284,38 +282,6 @@ class AgentRuntime @Inject constructor(
             } else {
                 consecutiveToolErrors = 0
                 lastFailedToolName = ""
-            }
-
-            // Detect duplicate successful tool calls (LLM calling same tool with same args repeatedly)
-            val successCalls = execResults.filter { it.result.success }
-            if (successCalls.isNotEmpty()) {
-                val callSig = successCalls.joinToString("|") { "${it.tc.name}:${it.tc.args}" }
-                if (callSig == lastSuccessfulToolCall) {
-                    consecutiveDuplicateSuccess++
-                    if (consecutiveDuplicateSuccess >= 2) {
-                        Log.w(TAG, "Duplicate successful tool call detected ($consecutiveDuplicateSuccess times), forcing end_turn")
-                        // Override the tool result to tell LLM it already did this
-                        val forceMsg = "已完成，请直接回复用户结果，不要再重复调用。"
-                        emit(AgentEvent.TextChunk(forceMsg))
-                        fullAssistantText.append(forceMsg)
-                        // Save and exit
-                        val assistantMsg = MessageEntity(
-                            id = UUID.randomUUID().toString(),
-                            sessionId = sessionId,
-                            role = "assistant",
-                            content = fullAssistantText.toString(),
-                            timestamp = System.currentTimeMillis(),
-                            inputTokens = totalInputTokens,
-                            outputTokens = totalOutputTokens
-                        )
-                        messageDao.insertMessage(assistantMsg)
-                        emit(AgentEvent.TurnComplete(fullAssistantText.toString(), totalInputTokens, totalOutputTokens))
-                        return@flow
-                    }
-                } else {
-                    consecutiveDuplicateSuccess = 0
-                    lastSuccessfulToolCall = callSig
-                }
             }
 
             execResults.forEach { (tc, result) ->

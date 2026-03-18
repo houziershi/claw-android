@@ -32,7 +32,10 @@ private const val TAG = "AlarmTool"
 private const val CHANNEL_ID = "claw_alarm"
 private const val CHANNEL_NAME = "Claw Alarms"
 
-class AlarmTool(private val context: Context) : Tool {
+class AlarmTool(
+    private val context: Context,
+    private val db: com.openclaw.agent.data.db.AppDatabase? = null
+) : Tool {
     override val name = "alarm"
     override val description = """Manage alarms and scheduled tasks.
 Actions:
@@ -323,8 +326,8 @@ Actions:
     }
 
     private fun getDb(): AppDatabase {
-        return Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
-            .fallbackToDestructiveMigration()
+        return db ?: Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
+            .addMigrations(AppDatabase.MIGRATION_1_2)
             .build()
     }
 
@@ -480,7 +483,7 @@ class AlarmReceiver : BroadcastReceiver() {
             Thread {
                 try {
                     val db = Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
-                        .fallbackToDestructiveMigration().build()
+                        .addMigrations(AppDatabase.MIGRATION_1_2).build()
                     db.scheduledTaskDao().let { dao ->
                         kotlinx.coroutines.runBlocking {
                             dao.updateRunTime(taskId, System.currentTimeMillis(), nextRun)
@@ -517,7 +520,7 @@ class BootReceiver : BroadcastReceiver() {
         Thread {
             try {
                 val db = Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
-                    .fallbackToDestructiveMigration().build()
+                    .addMigrations(AppDatabase.MIGRATION_1_2).build()
                 val tasks = kotlinx.coroutines.runBlocking {
                     db.scheduledTaskDao().getAllEnabledSync()
                 }
