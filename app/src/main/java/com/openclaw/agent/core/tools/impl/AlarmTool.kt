@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.media.RingtoneManager
 import android.os.Build
 import android.provider.AlarmClock
@@ -21,11 +20,10 @@ import java.util.Calendar
 private const val TAG = "AlarmTool"
 private const val CHANNEL_ID = "claw_alarm"
 private const val CHANNEL_NAME = "Claw Alarms"
-private const val PREFS_NAME = "claw_alarms"
 
 class AlarmTool(private val context: Context) : Tool {
     override val name = "alarm"
-    override val description = "Manage alarms. Actions: 'set' (create alarm), 'list' (show all Claw alarms), 'delete' (cancel alarm by hour+minute)."
+    override val description = "Manage alarms. Actions: 'set' (create alarm), 'list' (query system next alarm), 'delete' (try to cancel alarm). Note: list can only return the next upcoming system alarm due to Android API limitation."
     override val parameterSchema: JsonObject = buildJsonObject {
         put("type", "object")
         putJsonObject("properties") {
@@ -48,10 +46,6 @@ class AlarmTool(private val context: Context) : Tool {
             }
         }
         put("required", buildJsonArray { add(JsonPrimitive("action")) })
-    }
-
-    private val prefs: SharedPreferences by lazy {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
     init {
@@ -113,7 +107,7 @@ class AlarmTool(private val context: Context) : Tool {
                 Log.w(TAG, "System AlarmClock failed: ${e.message}")
             }
 
-            // Strategy 2: AlarmManager as backup
+            // Strategy 2: AlarmManager as backup notification
             val calendar = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, hour)
                 set(Calendar.MINUTE, minute)
@@ -142,9 +136,6 @@ class AlarmTool(private val context: Context) : Tool {
                 alarmManager.set(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
             }
 
-            // Save to local record
-            saveAlarmRecord(hour, minute, message, calendar.timeInMillis)
-
             val timeStr = "%02d:%02d".format(hour, minute)
             val resultMsg = if (systemAlarmSet) {
                 "Alarm set for $timeStr — $message"
@@ -162,45 +153,36 @@ class AlarmTool(private val context: Context) : Tool {
     // ── LIST ─────────────────────────────────────────────────────────────
 
     private fun listAlarms(): ToolResult {
-        val sb = StringBuilder()
-
-        // 1. System next alarm (from AlarmManager API)
-        try {
+        return try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val nextAlarm: AlarmManager.AlarmClockInfo? = alarmManager.nextAlarmClock
             if (nextAlarm != null) {
-                val triggerMs = nextAlarm.triggerTime
-                val cal = Calendar.getInstance().apply { timeInMillis = triggerMs }
+                val cal = Calendar.getInstance().apply { timeInMillis = nextAlarm.triggerTime }
                 val h = cal.get(Calendar.HOUR_OF_DAY)
                 val m = cal.get(Calendar.MINUTE)
                 val month = cal.get(Calendar.MONTH) + 1
                 val day = cal.get(Calendar.DAY_OF_MONTH)
-                sb.appendLine("System next alarm: %d/%d %02d:%02d".format(month, day, h, m))
+                val weekday = when (cal.get(Calendar.DAY_OF_WEEK)) {
+                    Calendar.MONDAY -> "Mon"
+                    Calendar.TUESDAY -> "Tue"
+                    Calendar.WEDNESDAY -> "Wed"
+                    Calendar.THURSDAY -> "Thu"
+                    Calendar.FRIDAY -> "Fri"
+                    Calendar.SATURDAY -> "Sat"
+                    Calendar.SUNDAY -> "Sun"
+                    else -> ""
+                }
+                ToolResult(
+                    success = true,
+                    content = "Next alarm: %d/%d (%s) %02d:%02d. Note: Android only allows querying the next upcoming alarm, not all alarms.".format(month, day, weekday, h, m)
+                )
             } else {
-                sb.appendLine("System next alarm: none")
+                ToolResult(success = true, content = "No upcoming alarms found.")
             }
         } catch (e: Exception) {
-            sb.appendLine("System next alarm: unable to read")
             Log.w(TAG, "Failed to read system alarm: ${e.message}")
+            ToolResult(success = true, content = "Unable to read system alarms.")
         }
-
-        // 2. Claw managed alarms (local records)
-        val alarms = getAllAlarmRecords()
-        val now = System.currentTimeMillis()
-        if (alarms.isNotEmpty()) {
-            sb.appendLine("Claw alarms (${alarms.size}):")
-            alarms.sortedBy { it.triggerTime }.forEach { alarm ->
-                val status = if (alarm.triggerTime > now) "⏳ pending" else "✅ fired"
-                sb.appendLine("  • %02d:%02d — %s [%s]".format(alarm.hour, alarm.minute, alarm.message, status))
-            }
-        } else {
-            sb.appendLine("Claw alarms: none")
-        }
-
-        // Clean up fired alarms from local records
-        alarms.filter { it.triggerTime <= now }.forEach { removeAlarmRecord(it.hour, it.minute) }
-
-        return ToolResult(success = true, content = sb.toString().trim())
     }
 
     // ── DELETE ───────────────────────────────────────────────────────────
@@ -214,7 +196,7 @@ class AlarmTool(private val context: Context) : Tool {
                 success = false, content = "", errorMessage = "Missing 'minute' for delete"
             )
 
-            // Cancel AlarmManager
+            // Cancel AlarmManager backup notification
             val requestCode = hour * 100 + minute
             val alarmIntent = Intent(context, AlarmReceiver::class.java)
             val pendingIntent = PendingIntent.getBroadcast(
@@ -229,7 +211,7 @@ class AlarmTool(private val context: Context) : Tool {
                 Log.d(TAG, "AlarmManager alarm cancelled: %02d:%02d".format(hour, minute))
             }
 
-            // Try dismiss system alarm
+            // Try dismiss system alarm (may fail from background)
             try {
                 val dismissIntent = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
                     putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_TIME)
@@ -244,55 +226,17 @@ class AlarmTool(private val context: Context) : Tool {
                 Log.w(TAG, "System dismiss failed: ${e.message}")
             }
 
-            // Remove local record
-            removeAlarmRecord(hour, minute)
-
             // Cancel notification if any
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.cancel(requestCode)
 
             ToolResult(
                 success = true,
-                content = "Claw notification for %02d:%02d cancelled. Note: system Clock app alarms cannot be deleted from background — user may need to manually delete them in the Clock app.".format(hour, minute)
+                content = "Claw notification for %02d:%02d cancelled. Note: system Clock app alarms may need to be manually deleted by the user.".format(hour, minute)
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to delete alarm", e)
             ToolResult(success = false, content = "", errorMessage = "Failed to delete alarm: ${e.message}")
-        }
-    }
-
-    // ── Local alarm records (SharedPreferences) ─────────────────────────
-
-    private data class AlarmRecord(val hour: Int, val minute: Int, val message: String, val triggerTime: Long)
-
-    private fun alarmKey(hour: Int, minute: Int) = "%02d:%02d".format(hour, minute)
-
-    private fun saveAlarmRecord(hour: Int, minute: Int, message: String, triggerTime: Long) {
-        val key = alarmKey(hour, minute)
-        val value = "$message|$triggerTime"
-        prefs.edit().putString(key, value).apply()
-        Log.d(TAG, "Saved alarm record: $key -> $value")
-    }
-
-    private fun removeAlarmRecord(hour: Int, minute: Int) {
-        val key = alarmKey(hour, minute)
-        prefs.edit().remove(key).apply()
-        Log.d(TAG, "Removed alarm record: $key")
-    }
-
-    private fun getAllAlarmRecords(): List<AlarmRecord> {
-        return prefs.all.mapNotNull { (key, value) ->
-            try {
-                val parts = key.split(":")
-                val hour = parts[0].toInt()
-                val minute = parts[1].toInt()
-                val valueParts = (value as String).split("|", limit = 2)
-                val message = valueParts[0]
-                val triggerTime = valueParts[1].toLong()
-                AlarmRecord(hour, minute, message, triggerTime)
-            } catch (e: Exception) {
-                null
-            }
         }
     }
 }
