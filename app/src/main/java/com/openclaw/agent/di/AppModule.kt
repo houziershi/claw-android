@@ -8,7 +8,12 @@ import androidx.room.Room
 import com.openclaw.agent.core.memory.FileMemoryStore
 import com.openclaw.agent.core.memory.MemoryStore
 import com.openclaw.agent.core.tools.ToolRegistry
-import com.openclaw.agent.core.tools.impl.*
+import com.openclaw.agent.core.tools.impl.AlarmTool
+import com.openclaw.agent.core.tools.impl.ClipboardTool
+import com.openclaw.agent.core.tools.impl.CurrentTimeTool
+import com.openclaw.agent.core.tools.impl.DeviceInfoTool
+import com.openclaw.agent.core.tools.impl.VolumeTool
+import com.openclaw.agent.core.tools.impl.WebSearchTool
 import com.openclaw.agent.data.db.AppDatabase
 import com.openclaw.agent.data.db.MessageDao
 import com.openclaw.agent.data.db.SessionDao
@@ -79,6 +84,7 @@ object AppModule {
         registry.register(ClipboardTool(context))
         registry.register(WebSearchTool(okHttpClient))
         registry.register(AlarmTool(context))
+        registry.register(VolumeTool(context))
 
         return registry
     }
