@@ -1,14 +1,19 @@
 package com.openclaw.agent.ui.settings
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -23,7 +28,11 @@ fun SettingsScreen(
 ) {
     val selectedModel by viewModel.selectedModel.collectAsState(initial = "")
     val apiKey by viewModel.apiKey.collectAsState()
+    val baseUrl by viewModel.baseUrl.collectAsState()
+    val connectionTestState by viewModel.connectionTestState.collectAsState()
+
     var apiKeyInput by remember(apiKey) { mutableStateOf(apiKey) }
+    var baseUrlInput by remember(baseUrl) { mutableStateOf(baseUrl) }
     var showApiKey by remember { mutableStateOf(false) }
     var modelDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -49,14 +58,16 @@ fun SettingsScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // API Key section
-            Text("API Key", style = MaterialTheme.typography.titleMedium)
+            // ── API Configuration ──────────────────────────────────────────
+            Text("API Configuration", style = MaterialTheme.typography.titleMedium)
+
+            // API Key
             OutlinedTextField(
                 value = apiKeyInput,
                 onValueChange = { apiKeyInput = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Claude API Key") },
-                placeholder = { Text("sk-ant-...") },
+                label = { Text("API Key") },
+                placeholder = { Text("sk-...") },
                 singleLine = true,
                 visualTransformation = if (showApiKey) VisualTransformation.None
                     else PasswordVisualTransformation(),
@@ -69,18 +80,33 @@ fun SettingsScreen(
                     }
                 }
             )
-            if (apiKeyInput != apiKey) {
+
+            // Base URL
+            OutlinedTextField(
+                value = baseUrlInput,
+                onValueChange = { baseUrlInput = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("API Base URL") },
+                placeholder = { Text("https://api.anthropic.com/v1/messages") },
+                singleLine = true
+            )
+
+            // Save button (show when either field changed)
+            if (apiKeyInput != apiKey || baseUrlInput != baseUrl) {
                 Button(
-                    onClick = { viewModel.saveApiKey(apiKeyInput) },
+                    onClick = {
+                        if (apiKeyInput != apiKey) viewModel.saveApiKey(apiKeyInput)
+                        if (baseUrlInput != baseUrl) viewModel.saveBaseUrl(baseUrlInput)
+                    },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Save API Key")
+                    Text("Save")
                 }
             }
 
             HorizontalDivider()
 
-            // Model selection
+            // ── Model Selection ────────────────────────────────────────────
             Text("Model", style = MaterialTheme.typography.titleMedium)
             ExposedDropdownMenuBox(
                 expanded = modelDropdownExpanded,
@@ -114,7 +140,117 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // About
+            // ── Connection Test ────────────────────────────────────────────
+            Text("Connection Test", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Send a test message to verify API Key, Base URL, and model are working correctly.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Button(
+                onClick = {
+                    viewModel.resetTestState()
+                    viewModel.testConnection(selectedModel)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = connectionTestState !is ConnectionTestState.Testing
+            ) {
+                when (connectionTestState) {
+                    is ConnectionTestState.Testing -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Testing...")
+                    }
+                    else -> {
+                        Icon(Icons.Default.NetworkCheck, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Test Connection")
+                    }
+                }
+            }
+
+            // Test result card
+            when (val state = connectionTestState) {
+                is ConnectionTestState.Success -> {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateContentSize(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "✅ Connection Successful",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Reply: ${state.reply.take(200)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                "Tokens: ${state.inputTokens} in / ${state.outputTokens} out",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
+                is ConnectionTestState.Failure -> {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateContentSize(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Error,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "❌ Connection Failed",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                state.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+                else -> { /* Idle or Testing — no card */ }
+            }
+
+            HorizontalDivider()
+
+            // ── About ──────────────────────────────────────────────────────
             Text("About", style = MaterialTheme.typography.titleMedium)
             Text(
                 "Claw Android v0.1.0\nAn independent AI agent with memory and skills.",

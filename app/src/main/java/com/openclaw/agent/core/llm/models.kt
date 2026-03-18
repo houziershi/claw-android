@@ -51,11 +51,11 @@ data class ToolDefinition(
 @Serializable
 data class ClaudeRequest(
     val model: String,
-    @SerialName("max_tokens") val maxTokens: Int = 4096,
+    @SerialName("max_tokens") val maxTokens: Int,
     val system: String? = null,
     val messages: List<LlmMessage>,
     val tools: List<ToolDefinition>? = null,
-    val stream: Boolean = true
+    val stream: Boolean
 )
 
 // ─── SSE streaming event models ───────────────────────────────────────────────
