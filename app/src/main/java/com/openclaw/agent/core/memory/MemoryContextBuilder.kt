@@ -19,15 +19,17 @@ class MemoryContextBuilder @Inject constructor(
      * Build the full system prompt by combining:
      * 1. SOUL.md  — persona
      * 2. USER.md  — user profile
-     * 3. Recent daily notes
-     * 4. Relevant MEMORY.md snippets (keyword search)
-     * 5. Current time + device info
+     * 3. MEMORY.md — long-term facts
+     * 4. Recent daily notes
+     * 5. Relevant memory snippets (keyword search)
+     * 6. Current time + device info
+     * 7. Memory usage instructions
      */
     suspend fun buildSystemPrompt(
         lastUserMessage: String = "",
         customPrompt: String? = null
     ): String = buildString {
-        // 1. Custom prompt override (if set in Settings)
+        // Custom prompt override (if set in Settings)
         if (customPrompt != null) {
             appendLine(customPrompt)
             appendLine()
@@ -49,9 +51,25 @@ class MemoryContextBuilder @Inject constructor(
             appendLine()
         }
 
-        // 3. Long-term memory (keyword-relevant snippets)
+        // 3. Long-term memory
+        val memory = memoryStore.read("MEMORY.md")
+        if (!memory.isNullOrBlank()) {
+            appendLine("## Long-term Memory")
+            appendLine(memory)
+            appendLine()
+        }
+
+        // 4. Recent daily notes (yesterday + today)
+        val recentNotes = memoryStore.getRecentDailyNotes()
+        if (recentNotes.isNotBlank()) {
+            appendLine("## Recent Activity")
+            appendLine(recentNotes)
+            appendLine()
+        }
+
+        // 5. Relevant memory snippets (keyword search from user message)
         if (lastUserMessage.isNotBlank()) {
-            val snippets = memoryStore.search(lastUserMessage, maxResults = 5)
+            val snippets = memoryStore.search(lastUserMessage, maxResults = 3)
             if (snippets.isNotEmpty()) {
                 appendLine("## Relevant Memory")
                 snippets.forEach { snippet ->
@@ -61,21 +79,23 @@ class MemoryContextBuilder @Inject constructor(
             }
         }
 
-        // 4. Recent daily notes (yesterday + today)
-        val recentNotes = memoryStore.getRecentDailyNotes()
-        if (recentNotes.isNotBlank()) {
-            appendLine("## Recent Context")
-            appendLine(recentNotes)
-            appendLine()
-        }
-
-        // 5. Current time and device info
+        // 6. Current time and device info
         val now = LocalDateTime.now()
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         appendLine("## Current Context")
         appendLine("Time: ${now.format(formatter)}")
         appendLine("Device: Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         appendLine("Device Model: ${Build.MANUFACTURER} ${Build.MODEL}")
+        appendLine()
+
+        // 7. Memory usage instructions
+        appendLine("## Memory Instructions")
+        appendLine("You have memory tools to persist important information:")
+        appendLine("- Use `memory_write` to save user preferences, important facts, or notes to MEMORY.md or USER.md")
+        appendLine("- Use `memory_read` to recall stored information")
+        appendLine("- Use `memory_search` to find relevant past information")
+        appendLine("- Proactively remember: when the user shares preferences, their name, or important context, save it")
+        appendLine("- Daily notes are auto-recorded; you don't need to write them manually")
     }
 
     /**

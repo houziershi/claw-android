@@ -3,6 +3,7 @@ package com.openclaw.agent.core.runtime
 import android.util.Log
 import com.openclaw.agent.core.llm.*
 import com.openclaw.agent.core.memory.MemoryContextBuilder
+import com.openclaw.agent.core.memory.MemoryStore
 import com.openclaw.agent.core.tools.ToolRegistry
 import com.openclaw.agent.core.tools.ToolRouter
 import com.openclaw.agent.data.db.MessageDao
@@ -11,6 +12,8 @@ import com.openclaw.agent.data.db.entities.MessageEntity
 import com.openclaw.agent.data.preferences.SettingsStore
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,6 +25,7 @@ private const val MAX_TOOL_LOOPS = 10
 class AgentRuntime @Inject constructor(
     private val settingsStore: SettingsStore,
     private val memoryContextBuilder: MemoryContextBuilder,
+    private val memoryStore: MemoryStore,
     private val sessionDao: SessionDao,
     private val messageDao: MessageDao,
     private val toolRegistry: ToolRegistry,
@@ -180,6 +184,16 @@ class AgentRuntime @Inject constructor(
                     )
                     messageDao.insertMessage(assistantMsg)
                     sessionDao.incrementMessageCount(sessionId, System.currentTimeMillis())
+                }
+
+                // Auto-record to daily notes
+                try {
+                    val time = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                    val summary = "- [$time] User: ${userMessage.take(80)} → Assistant: ${fullAssistantText.toString().take(120)}"
+                    memoryStore.appendToDailyNote(summary)
+                    Log.d(TAG, "Daily note recorded")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to record daily note", e)
                 }
 
                 emit(AgentEvent.TurnComplete(fullAssistantText.toString(), totalInputTokens, totalOutputTokens))

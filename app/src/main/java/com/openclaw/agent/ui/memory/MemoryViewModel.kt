@@ -2,6 +2,7 @@ package com.openclaw.agent.ui.memory
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.openclaw.agent.core.memory.MemorySnippet
 import com.openclaw.agent.core.memory.MemoryStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,16 +27,28 @@ class MemoryViewModel @Inject constructor(
     private val _isEditing = MutableStateFlow(false)
     val isEditing: StateFlow<Boolean> = _isEditing
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery
+
+    private val _searchResults = MutableStateFlow<List<MemorySnippet>>(emptyList())
+    val searchResults: StateFlow<List<MemorySnippet>> = _searchResults
+
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching: StateFlow<Boolean> = _isSearching
+
+    private val _saveSuccess = MutableStateFlow<String?>(null)
+    val saveSuccess: StateFlow<String?> = _saveSuccess
+
     fun loadFiles() {
         viewModelScope.launch {
-            _files.value = memoryStore.list()
+            _files.value = memoryStore.list().sorted()
         }
     }
 
     fun openFile(path: String) {
         viewModelScope.launch {
             _selectedFile.value = path
-            _fileContent.value = memoryStore.read(path) ?: ""
+            _fileContent.value = memoryStore.read(path) ?: "(empty)"
             _isEditing.value = false
         }
     }
@@ -50,11 +63,50 @@ class MemoryViewModel @Inject constructor(
             memoryStore.write(path, content)
             _fileContent.value = content
             _isEditing.value = false
+            _saveSuccess.value = "Saved $path"
+        }
+    }
+
+    fun clearSaveMessage() {
+        _saveSuccess.value = null
+    }
+
+    fun deleteFile(path: String) {
+        viewModelScope.launch {
+            memoryStore.delete(path)
+            _selectedFile.value = null
+            _isEditing.value = false
+            loadFiles()
         }
     }
 
     fun goBack() {
         _selectedFile.value = null
         _isEditing.value = false
+        _isSearching.value = false
+        _searchResults.value = emptyList()
+        _searchQuery.value = ""
+    }
+
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun search() {
+        val query = _searchQuery.value
+        if (query.isBlank()) return
+        _isSearching.value = true
+        viewModelScope.launch {
+            _searchResults.value = memoryStore.search(query, maxResults = 20)
+            _isSearching.value = false
+        }
+    }
+
+    fun createNewFile(path: String, content: String) {
+        viewModelScope.launch {
+            memoryStore.write(path, content)
+            loadFiles()
+            openFile(path)
+        }
     }
 }

@@ -8,12 +8,7 @@ import androidx.room.Room
 import com.openclaw.agent.core.memory.FileMemoryStore
 import com.openclaw.agent.core.memory.MemoryStore
 import com.openclaw.agent.core.tools.ToolRegistry
-import com.openclaw.agent.core.tools.impl.AlarmTool
-import com.openclaw.agent.core.tools.impl.ClipboardTool
-import com.openclaw.agent.core.tools.impl.CurrentTimeTool
-import com.openclaw.agent.core.tools.impl.DeviceInfoTool
-import com.openclaw.agent.core.tools.impl.VolumeTool
-import com.openclaw.agent.core.tools.impl.WebSearchTool
+import com.openclaw.agent.core.tools.impl.*
 import com.openclaw.agent.data.db.AppDatabase
 import com.openclaw.agent.data.db.MessageDao
 import com.openclaw.agent.data.db.SessionDao
@@ -74,17 +69,26 @@ object AppModule {
     @Singleton
     fun provideToolRegistry(
         @ApplicationContext context: Context,
-        okHttpClient: OkHttpClient
+        okHttpClient: OkHttpClient,
+        memoryStore: MemoryStore
     ): ToolRegistry {
         val registry = ToolRegistry()
 
-        // Register built-in tools
+        // Device tools
         registry.register(CurrentTimeTool())
         registry.register(DeviceInfoTool(context))
         registry.register(ClipboardTool(context))
-        registry.register(WebSearchTool(okHttpClient))
-        registry.register(AlarmTool(context))
         registry.register(VolumeTool(context))
+        registry.register(AlarmTool(context))
+
+        // Web tools
+        registry.register(WebSearchTool(okHttpClient))
+
+        // Memory tools
+        registry.register(MemoryReadTool(memoryStore))
+        registry.register(MemoryWriteTool(memoryStore))
+        registry.register(MemorySearchTool(memoryStore))
+        registry.register(MemoryListTool(memoryStore))
 
         return registry
     }
