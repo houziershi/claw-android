@@ -3,6 +3,8 @@ package com.openclaw.agent.core.runtime
 import android.util.Log
 import com.openclaw.agent.core.llm.*
 import com.openclaw.agent.core.memory.MemoryContextBuilder
+import com.openclaw.agent.core.tools.ToolRegistry
+import com.openclaw.agent.core.tools.ToolRouter
 import com.openclaw.agent.data.db.MessageDao
 import com.openclaw.agent.data.db.SessionDao
 import com.openclaw.agent.data.db.entities.MessageEntity
@@ -21,7 +23,9 @@ class AgentRuntime @Inject constructor(
     private val settingsStore: SettingsStore,
     private val memoryContextBuilder: MemoryContextBuilder,
     private val sessionDao: SessionDao,
-    private val messageDao: MessageDao
+    private val messageDao: MessageDao,
+    private val toolRegistry: ToolRegistry,
+    private val toolRouter: ToolRouter
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -37,7 +41,7 @@ class AgentRuntime @Inject constructor(
         baseUrl: String = "https://api.anthropic.com/v1/messages"
     ): Flow<AgentEvent> = flow {
         if (apiKey.isBlank()) {
-            emit(AgentEvent.Error("API key not set. Go to Settings to add your Claude API key."))
+            emit(AgentEvent.Error("API key not set. Go to Settings to add your API key."))
             return@flow
         }
 
@@ -57,65 +61,229 @@ class AgentRuntime @Inject constructor(
 
         // Build conversation history from DB
         val dbMessages = messageDao.getMessagesForSessionOnce(sessionId)
-        val llmMessages = dbMessages.map { msg ->
-            LlmMessage(
-                role = msg.role,
-                content = JsonPrimitive(msg.content)
-            )
-        }
+        val conversationHistory = dbMessages.map { msg ->
+            when {
+                // Tool result messages: reconstruct as tool_result content blocks
+                msg.role == "user" && msg.toolResultJson != null -> {
+                    LlmMessage(
+                        role = "user",
+                        content = json.parseToJsonElement(msg.toolResultJson)
+                    )
+                }
+                // Assistant messages with tool calls: reconstruct as tool_use content blocks
+                msg.role == "assistant" && msg.toolCallsJson != null -> {
+                    LlmMessage(
+                        role = "assistant",
+                        content = json.parseToJsonElement(msg.toolCallsJson)
+                    )
+                }
+                // Normal text messages
+                else -> {
+                    LlmMessage(
+                        role = msg.role,
+                        content = JsonPrimitive(msg.content)
+                    )
+                }
+            }
+        }.toMutableList()
 
         // Create LLM client
         val client = createClient(apiKey, baseUrl)
 
-        // Call LLM (no tools in Phase 1)
-        val fullText = StringBuilder()
-        var inputTokens = 0
-        var outputTokens = 0
+        // Get tool definitions
+        val toolDefs = toolRegistry.toToolDefinitions()
+        Log.d(TAG, "Available tools: ${toolDefs.size} — ${toolDefs.joinToString { it.name }}")
 
-        client.chat(
-            messages = llmMessages,
-            systemPrompt = systemPrompt,
-            tools = emptyList(), // Tools added in Phase 2
-            model = model
-        ).collect { event ->
-            when (event) {
-                is LlmEvent.TextChunk -> {
-                    fullText.append(event.text)
-                    emit(AgentEvent.TextChunk(event.text))
-                }
-                is LlmEvent.Done -> {
-                    inputTokens = event.inputTokens
-                    outputTokens = event.outputTokens
-                }
-                is LlmEvent.Error -> {
-                    emit(AgentEvent.Error(event.message))
-                    return@collect
-                }
-                is LlmEvent.ToolCallStart,
-                is LlmEvent.ToolCallInput,
-                is LlmEvent.ToolCallComplete -> {
-                    // Tool handling will be added in Phase 2
-                    Log.d(TAG, "Tool event received (not handled in Phase 1): $event")
+        // ── Function Calling Loop ──────────────────────────────────────
+        var loopCount = 0
+        var totalInputTokens = 0
+        var totalOutputTokens = 0
+        val fullAssistantText = StringBuilder()
+
+        while (loopCount < MAX_TOOL_LOOPS) {
+            loopCount++
+            Log.d(TAG, "=== LLM call #$loopCount ===")
+
+            val currentText = StringBuilder()
+            var stopReason = "end_turn"
+            var inputTokens = 0
+            var outputTokens = 0
+
+            // Collect tool calls from this turn
+            val pendingToolCalls = mutableListOf<PendingToolCall>()
+            var currentToolId = ""
+            var currentToolName = ""
+            val currentToolInput = StringBuilder()
+            var hasError = false
+
+            client.chat(
+                messages = conversationHistory,
+                systemPrompt = systemPrompt,
+                tools = toolDefs,
+                model = model
+            ).collect { event ->
+                when (event) {
+                    is LlmEvent.TextChunk -> {
+                        currentText.append(event.text)
+                        fullAssistantText.append(event.text)
+                        emit(AgentEvent.TextChunk(event.text))
+                    }
+                    is LlmEvent.ToolCallStart -> {
+                        currentToolId = event.id
+                        currentToolName = event.name
+                        currentToolInput.clear()
+                        Log.d(TAG, "Tool call started: ${event.name} (${event.id})")
+                        emit(AgentEvent.ToolCallStarted(event.id, event.name))
+                    }
+                    is LlmEvent.ToolCallInput -> {
+                        currentToolInput.append(event.partialJson)
+                    }
+                    is LlmEvent.ToolCallComplete -> {
+                        Log.d(TAG, "Tool call complete: ${event.name} args=${event.input}")
+                        pendingToolCalls.add(
+                            PendingToolCall(event.id, event.name, event.input)
+                        )
+                        currentToolId = ""
+                        currentToolName = ""
+                        currentToolInput.clear()
+                    }
+                    is LlmEvent.Done -> {
+                        stopReason = event.stopReason
+                        inputTokens = event.inputTokens
+                        outputTokens = event.outputTokens
+                        totalInputTokens += inputTokens
+                        totalOutputTokens += outputTokens
+                    }
+                    is LlmEvent.Error -> {
+                        emit(AgentEvent.Error(event.message))
+                        hasError = true
+                    }
                 }
             }
-        }
 
-        // Save assistant message to DB
-        if (fullText.isNotEmpty()) {
-            val assistantMsg = MessageEntity(
+            if (hasError) return@flow
+
+            // ── If stop_reason is NOT tool_use, we're done ─────────────
+            if (stopReason != "tool_use" || pendingToolCalls.isEmpty()) {
+                Log.d(TAG, "Turn complete: stopReason=$stopReason, loops=$loopCount")
+
+                // Save assistant text message to DB
+                if (currentText.isNotEmpty()) {
+                    val assistantMsg = MessageEntity(
+                        id = UUID.randomUUID().toString(),
+                        sessionId = sessionId,
+                        role = "assistant",
+                        content = currentText.toString(),
+                        timestamp = System.currentTimeMillis(),
+                        inputTokens = totalInputTokens,
+                        outputTokens = totalOutputTokens
+                    )
+                    messageDao.insertMessage(assistantMsg)
+                    sessionDao.incrementMessageCount(sessionId, System.currentTimeMillis())
+                }
+
+                emit(AgentEvent.TurnComplete(fullAssistantText.toString(), totalInputTokens, totalOutputTokens))
+                return@flow
+            }
+
+            // ── stop_reason is tool_use → execute tools ────────────────
+            Log.d(TAG, "Processing ${pendingToolCalls.size} tool call(s)")
+            emit(AgentEvent.Thinking)
+
+            // Build the assistant message content blocks (text + tool_use)
+            val assistantContentBlocks = buildJsonArray {
+                if (currentText.isNotEmpty()) {
+                    add(buildJsonObject {
+                        put("type", "text")
+                        put("text", currentText.toString())
+                    })
+                }
+                pendingToolCalls.forEach { tc ->
+                    add(buildJsonObject {
+                        put("type", "tool_use")
+                        put("id", tc.id)
+                        put("name", tc.name)
+                        put("input", tc.args)
+                    })
+                }
+            }
+
+            // Save assistant tool_use message to DB
+            val assistantToolMsg = MessageEntity(
                 id = UUID.randomUUID().toString(),
                 sessionId = sessionId,
                 role = "assistant",
-                content = fullText.toString(),
+                content = currentText.toString().ifEmpty { "[Tool call: ${pendingToolCalls.joinToString { it.name }}]" },
+                toolCallsJson = assistantContentBlocks.toString(),
                 timestamp = System.currentTimeMillis(),
                 inputTokens = inputTokens,
                 outputTokens = outputTokens
             )
-            messageDao.insertMessage(assistantMsg)
-            sessionDao.incrementMessageCount(sessionId, System.currentTimeMillis())
+            messageDao.insertMessage(assistantToolMsg)
 
-            emit(AgentEvent.TurnComplete(fullText.toString(), inputTokens, outputTokens))
+            // Add assistant message to conversation history
+            conversationHistory.add(
+                LlmMessage(role = "assistant", content = assistantContentBlocks)
+            )
+
+            // Execute each tool and collect results
+            data class ToolExecResult(
+                val tc: PendingToolCall,
+                val result: com.openclaw.agent.core.tools.ToolResult
+            )
+            val execResults = pendingToolCalls.map { tc ->
+                val result = toolRouter.execute(tc.name, tc.args)
+                Log.d(TAG, "Tool ${tc.name} result: success=${result.success}, content=${result.content.take(200)}")
+                ToolExecResult(tc, result)
+            }
+
+            // Emit tool finished events
+            execResults.forEach { (tc, result) ->
+                emit(AgentEvent.ToolCallFinished(
+                    id = tc.id,
+                    name = tc.name,
+                    input = tc.args,
+                    result = if (result.success) result.content else (result.errorMessage ?: "Unknown error"),
+                    success = result.success
+                ))
+            }
+
+            // Build tool result JSON blocks
+            val toolResultBlocks = buildJsonArray {
+                execResults.forEach { (tc, result) ->
+                    add(buildJsonObject {
+                        put("type", "tool_result")
+                        put("tool_use_id", tc.id)
+                        if (result.success) {
+                            put("content", result.content)
+                        } else {
+                            put("is_error", true)
+                            put("content", result.errorMessage ?: "Tool execution failed")
+                        }
+                    })
+                }
+            }
+
+            // Save tool results to DB
+            val toolResultMsg = MessageEntity(
+                id = UUID.randomUUID().toString(),
+                sessionId = sessionId,
+                role = "user",
+                content = pendingToolCalls.joinToString("\n") { tc -> "[Tool result: ${tc.name}]" },
+                toolResultJson = toolResultBlocks.toString(),
+                timestamp = System.currentTimeMillis()
+            )
+            messageDao.insertMessage(toolResultMsg)
+
+            // Add tool results to conversation history and loop back to LLM
+            conversationHistory.add(
+                LlmMessage(role = "user", content = toolResultBlocks)
+            )
         }
+
+        // If we hit MAX_TOOL_LOOPS
+        Log.w(TAG, "Hit max tool loop limit ($MAX_TOOL_LOOPS)")
+        emit(AgentEvent.Error("Reached maximum tool call limit ($MAX_TOOL_LOOPS). Stopping."))
     }
 
     private fun createClient(apiKey: String, baseUrl: String): LlmClient {
@@ -127,3 +295,10 @@ class AgentRuntime @Inject constructor(
         return ClaudeClient(apiKey, okHttpClient, baseUrl)
     }
 }
+
+/** Internal data class for pending tool calls within a single LLM turn */
+private data class PendingToolCall(
+    val id: String,
+    val name: String,
+    val args: JsonObject
+)

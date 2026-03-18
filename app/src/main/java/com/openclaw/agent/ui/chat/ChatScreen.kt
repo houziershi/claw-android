@@ -26,6 +26,7 @@ fun ChatScreen(
     val isStreaming by viewModel.isStreaming.collectAsState()
     val streamingText by viewModel.streamingText.collectAsState()
     val error by viewModel.error.collectAsState()
+    val activeToolCalls by viewModel.activeToolCalls.collectAsState()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -34,14 +35,15 @@ fun ChatScreen(
         viewModel.loadSession(sessionId)
     }
 
-    // Auto-scroll to bottom on new messages
-    LaunchedEffect(messages.size, streamingText) {
+    // Auto-scroll to bottom on new messages / tool calls / streaming
+    LaunchedEffect(messages.size, streamingText, activeToolCalls.size) {
         if (messages.isNotEmpty()) {
             scope.launch {
-                listState.animateScrollToItem(
-                    // +1 for streaming bubble if active
-                    if (isStreaming) messages.size else maxOf(0, messages.size - 1)
-                )
+                // Calculate total items: messages + tool calls + streaming bubble + thinking
+                val extraItems = (if (activeToolCalls.isNotEmpty()) 1 else 0) +
+                    (if (isStreaming && streamingText.isNotEmpty()) 1 else 0) +
+                    (if (isStreaming && streamingText.isEmpty() && activeToolCalls.isEmpty()) 1 else 0)
+                listState.animateScrollToItem(maxOf(0, messages.size - 1 + extraItems))
             }
         }
     }
@@ -73,11 +75,27 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(messages, key = { it.id }) { message ->
+                    // Skip tool-internal messages (tool_result) in display
+                    if (message.toolResultJson != null) return@items
+
                     MessageBubble(
                         content = message.content,
                         isUser = message.role == "user",
                         isError = message.isError
                     )
+                }
+
+                // Active tool calls
+                if (activeToolCalls.isNotEmpty()) {
+                    item(key = "tool_calls") {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            activeToolCalls.forEach { tc ->
+                                ToolCallCard(toolCall = tc)
+                            }
+                        }
+                    }
                 }
 
                 // Streaming bubble
@@ -91,8 +109,8 @@ fun ChatScreen(
                     }
                 }
 
-                // Streaming indicator
-                if (isStreaming && streamingText.isEmpty()) {
+                // Thinking indicator
+                if (isStreaming && streamingText.isEmpty() && activeToolCalls.isEmpty()) {
                     item(key = "thinking") {
                         Row(
                             modifier = Modifier.padding(start = 8.dp),

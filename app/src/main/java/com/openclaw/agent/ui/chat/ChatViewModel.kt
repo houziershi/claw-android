@@ -10,7 +10,18 @@ import com.openclaw.agent.data.preferences.SettingsStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 import javax.inject.Inject
+
+/** Represents a tool call in progress or completed, for UI display */
+data class ToolCallUiState(
+    val id: String,
+    val name: String,
+    val input: JsonObject? = null,
+    val result: String? = null,
+    val success: Boolean? = null,
+    val isRunning: Boolean = true
+)
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
@@ -33,6 +44,10 @@ class ChatViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    /** Active tool calls being displayed in the UI */
+    private val _activeToolCalls = MutableStateFlow<List<ToolCallUiState>>(emptyList())
+    val activeToolCalls: StateFlow<List<ToolCallUiState>> = _activeToolCalls.asStateFlow()
+
     fun loadSession(sessionId: String) {
         currentSessionId = sessionId
         viewModelScope.launch {
@@ -48,6 +63,7 @@ class ChatViewModel @Inject constructor(
         _isStreaming.value = true
         _streamingText.value = ""
         _error.value = null
+        _activeToolCalls.value = emptyList()
 
         viewModelScope.launch {
             val model = settingsStore.selectedModelFlow.first()
@@ -65,9 +81,33 @@ class ChatViewModel @Inject constructor(
                     is AgentEvent.TextChunk -> {
                         _streamingText.value += event.text
                     }
+                    is AgentEvent.ToolCallStarted -> {
+                        _activeToolCalls.value = _activeToolCalls.value + ToolCallUiState(
+                            id = event.id,
+                            name = event.name,
+                            isRunning = true
+                        )
+                    }
+                    is AgentEvent.ToolCallFinished -> {
+                        _activeToolCalls.value = _activeToolCalls.value.map { tc ->
+                            if (tc.id == event.id) {
+                                tc.copy(
+                                    input = event.input,
+                                    result = event.result,
+                                    success = event.success,
+                                    isRunning = false
+                                )
+                            } else tc
+                        }
+                    }
+                    is AgentEvent.Thinking -> {
+                        // Reset streaming text for next LLM turn
+                        _streamingText.value = ""
+                    }
                     is AgentEvent.TurnComplete -> {
                         _streamingText.value = ""
                         _isStreaming.value = false
+                        _activeToolCalls.value = emptyList()
                         // Auto-generate title from first message
                         if (_messages.value.size <= 2) {
                             val title = text.take(40).let {
@@ -80,11 +120,7 @@ class ChatViewModel @Inject constructor(
                         _error.value = event.message
                         _isStreaming.value = false
                         _streamingText.value = ""
-                    }
-                    is AgentEvent.ToolCallStarted,
-                    is AgentEvent.ToolCallFinished,
-                    is AgentEvent.Thinking -> {
-                        // Phase 2
+                        _activeToolCalls.value = emptyList()
                     }
                 }
             }

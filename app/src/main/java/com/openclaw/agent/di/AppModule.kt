@@ -7,6 +7,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.openclaw.agent.core.memory.FileMemoryStore
 import com.openclaw.agent.core.memory.MemoryStore
+import com.openclaw.agent.core.tools.ToolRegistry
+import com.openclaw.agent.core.tools.impl.*
 import com.openclaw.agent.data.db.AppDatabase
 import com.openclaw.agent.data.db.MessageDao
 import com.openclaw.agent.data.db.SessionDao
@@ -40,7 +42,8 @@ object AppModule {
             context,
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
-        ).build()
+        ).fallbackToDestructiveMigration()
+        .build()
 
     @Provides
     fun provideSessionDao(db: AppDatabase): SessionDao = db.sessionDao()
@@ -61,4 +64,22 @@ object AppModule {
     @Provides
     @Singleton
     fun bindMemoryStore(impl: FileMemoryStore): MemoryStore = impl
+
+    @Provides
+    @Singleton
+    fun provideToolRegistry(
+        @ApplicationContext context: Context,
+        okHttpClient: OkHttpClient
+    ): ToolRegistry {
+        val registry = ToolRegistry()
+
+        // Register built-in tools
+        registry.register(CurrentTimeTool())
+        registry.register(DeviceInfoTool(context))
+        registry.register(ClipboardTool(context))
+        registry.register(WebSearchTool(okHttpClient))
+        registry.register(AlarmTool(context))
+
+        return registry
+    }
 }

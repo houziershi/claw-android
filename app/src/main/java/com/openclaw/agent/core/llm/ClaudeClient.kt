@@ -50,7 +50,7 @@ class ClaudeClient(
             maxTokens = maxTokens,
             system = systemPrompt,
             messages = messages,
-            tools = null, // Phase 2
+            tools = tools.ifEmpty { null },
             stream = true
         )
 
