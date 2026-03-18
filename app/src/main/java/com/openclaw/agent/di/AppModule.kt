@@ -80,6 +80,7 @@ object AppModule {
         registry.register(ClipboardTool(context))
         registry.register(VolumeTool(context))
         registry.register(AlarmTool(context))
+        registry.register(BluetoothTool(context))
 
         // Web tools
         registry.register(WebSearchTool(okHttpClient))
