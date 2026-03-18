@@ -3,6 +3,8 @@ package com.openclaw.agent.core.tools.impl
 import android.util.Log
 import com.openclaw.agent.core.tools.Tool
 import com.openclaw.agent.core.tools.ToolResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -36,30 +38,32 @@ class WebFetchTool(private val okHttpClient: OkHttpClient) : Tool {
             success = false, content = "", errorMessage = "Missing 'url' parameter"
         )
 
-        return try {
-            val requestBuilder = Request.Builder()
-                .url(url)
-                .header("User-Agent", "curl/8.0")
-                .get()
+        return withContext(Dispatchers.IO) {
+            try {
+                val requestBuilder = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "curl/8.0")
+                    .get()
 
-            // Add custom headers if provided
-            args["headers"]?.jsonObject?.forEach { (key, value) ->
-                requestBuilder.header(key, value.jsonPrimitive.content)
+                // Add custom headers if provided
+                args["headers"]?.jsonObject?.forEach { (key, value) ->
+                    requestBuilder.header(key, value.jsonPrimitive.content)
+                }
+
+                val response = okHttpClient.newCall(requestBuilder.build()).execute()
+                val body = response.body?.string() ?: ""
+                val code = response.code
+                response.close()
+
+                if (code in 200..299) {
+                    ToolResult(success = true, content = body.take(50000)) // Cap at 50KB
+                } else {
+                    ToolResult(success = false, content = body.take(2000), errorMessage = "HTTP $code")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Fetch failed: $url", e)
+                ToolResult(success = false, content = "", errorMessage = "Fetch failed: ${e.message}")
             }
-
-            val response = okHttpClient.newCall(requestBuilder.build()).execute()
-            val body = response.body?.string() ?: ""
-            val code = response.code
-            response.close()
-
-            if (code in 200..299) {
-                ToolResult(success = true, content = body.take(50000)) // Cap at 50KB
-            } else {
-                ToolResult(success = false, content = body.take(2000), errorMessage = "HTTP $code")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Fetch failed: $url", e)
-            ToolResult(success = false, content = "", errorMessage = "Fetch failed: ${e.message}")
         }
     }
 }
