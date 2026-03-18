@@ -162,17 +162,44 @@ class AlarmTool(private val context: Context) : Tool {
     // ── LIST ─────────────────────────────────────────────────────────────
 
     private fun listAlarms(): ToolResult {
-        val alarms = getAllAlarmRecords()
-        if (alarms.isEmpty()) {
-            return ToolResult(success = true, content = "No alarms set by Claw.")
+        val sb = StringBuilder()
+
+        // 1. System next alarm (from AlarmManager API)
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val nextAlarm: AlarmManager.AlarmClockInfo? = alarmManager.nextAlarmClock
+            if (nextAlarm != null) {
+                val triggerMs = nextAlarm.triggerTime
+                val cal = Calendar.getInstance().apply { timeInMillis = triggerMs }
+                val h = cal.get(Calendar.HOUR_OF_DAY)
+                val m = cal.get(Calendar.MINUTE)
+                val month = cal.get(Calendar.MONTH) + 1
+                val day = cal.get(Calendar.DAY_OF_MONTH)
+                sb.appendLine("System next alarm: %d/%d %02d:%02d".format(month, day, h, m))
+            } else {
+                sb.appendLine("System next alarm: none")
+            }
+        } catch (e: Exception) {
+            sb.appendLine("System next alarm: unable to read")
+            Log.w(TAG, "Failed to read system alarm: ${e.message}")
         }
 
+        // 2. Claw managed alarms (local records)
+        val alarms = getAllAlarmRecords()
         val now = System.currentTimeMillis()
-        val sb = StringBuilder("Claw Alarms (${alarms.size}):\n")
-        alarms.sortedBy { it.triggerTime }.forEach { alarm ->
-            val status = if (alarm.triggerTime > now) "⏳ pending" else "✅ fired"
-            sb.appendLine("  • %02d:%02d — %s [%s]".format(alarm.hour, alarm.minute, alarm.message, status))
+        if (alarms.isNotEmpty()) {
+            sb.appendLine("Claw alarms (${alarms.size}):")
+            alarms.sortedBy { it.triggerTime }.forEach { alarm ->
+                val status = if (alarm.triggerTime > now) "⏳ pending" else "✅ fired"
+                sb.appendLine("  • %02d:%02d — %s [%s]".format(alarm.hour, alarm.minute, alarm.message, status))
+            }
+        } else {
+            sb.appendLine("Claw alarms: none")
         }
+
+        // Clean up fired alarms from local records
+        alarms.filter { it.triggerTime <= now }.forEach { removeAlarmRecord(it.hour, it.minute) }
+
         return ToolResult(success = true, content = sb.toString().trim())
     }
 
