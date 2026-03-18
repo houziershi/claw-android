@@ -136,8 +136,10 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(messages, key = { it.id }) { message ->
-                    // Skip tool-internal messages (tool_result) in display
+                    // Skip tool-internal messages in display
                     if (message.toolResultJson != null) return@items
+                    // Skip intermediate tool call messages (shown as active tool cards instead)
+                    if (message.toolCallsJson != null && message.content.startsWith("[Tool call:")) return@items
 
                     MessageBubble(
                         content = message.content,
