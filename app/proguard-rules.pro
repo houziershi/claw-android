@@ -30,3 +30,7 @@
 
 # Markwon
 -dontwarn ru.noties.markwon.**
+
+# Google Tink / EncryptedSharedPreferences - errorprone annotations not needed at runtime
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**
