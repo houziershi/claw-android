@@ -1,6 +1,6 @@
 # Weather
 
-Get current weather and forecasts for any location.
+Get current weather and forecasts for any location via wttr.in.
 
 ## Triggers
 - 天气
@@ -10,18 +10,18 @@ Get current weather and forecasts for any location.
 - 下雨
 - forecast
 - 几度
+- 预报
 
 ## System Prompt
-When the user asks about weather, use the web_search tool to look up current weather information.
-Format the response with:
-- Current temperature and conditions
-- Today's high/low
-- Brief forecast if available
-Use emoji to make it visually appealing (☀️🌧️❄️🌤️).
-Always specify the location and data source.
+When the user asks about weather, use the get_weather tool.
+- For current conditions: call get_weather with format="current"
+- For forecasts: call get_weather with format="forecast"
+- Chinese city names are supported (e.g. 武汉, 北京, 上海)
+- Format the response with emoji to make it visually appealing
+- If no location is specified, ask the user which city they want
 
 ## Required Tools
-- web_search
+- get_weather
 
 ## Description
-查询任意城市的天气情况，包括当前温度、天气状况和未来预报。
+查询任意城市的天气情况，包括当前温度、天气状况、风速湿度和3天预报。数据来自 wttr.in，无需 API Key。

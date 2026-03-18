@@ -83,6 +83,7 @@ object AppModule {
 
         // Web tools
         registry.register(WebSearchTool(okHttpClient))
+        registry.register(WeatherTool(okHttpClient))
 
         // Memory tools
         registry.register(MemoryReadTool(memoryStore))

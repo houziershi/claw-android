@@ -124,6 +124,7 @@ fun ChatScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
         ) {
             // Messages list
             LazyColumn(
@@ -213,8 +214,7 @@ fun ChatScreen(
             ) {
                 Row(
                     modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .navigationBarsPadding(),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
                     OutlinedTextField(
