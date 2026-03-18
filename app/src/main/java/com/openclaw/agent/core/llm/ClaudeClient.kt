@@ -102,8 +102,9 @@ class ClaudeClient(
                 val line = source.readUtf8Line() ?: break
 
                 when {
-                    line.startsWith("data: ") -> {
-                        val data = line.removePrefix("data: ").trim()
+                    line.startsWith("data:") -> {
+                        // Handle both "data: {...}" (Claude) and "data:{...}" (Kimi) formats
+                        val data = line.removePrefix("data:").trim()
                         if (data == "[DONE]") return@flow
 
                         val payload = try {
