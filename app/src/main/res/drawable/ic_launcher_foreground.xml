@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simple claw/lobster icon placeholder -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,30 C46,30 40,36 40,44 L40,58 C40,62 42,66 46,68 L46,76 L50,76 L50,68 L54,68 L54,76 L58,76 L58,68 L62,68 L62,76 L66,76 L66,68 C70,66 72,62 72,58 L72,44 C72,36 66,30 54,30 Z M48,48 C46,48 44,46 44,44 C44,42 46,40 48,40 C50,40 52,42 52,44 C52,46 50,48 48,48 Z M64,48 C62,48 60,46 60,44 C60,42 62,40 64,40 C66,40 68,42 68,44 C68,46 66,48 64,48 Z"/>
+</vector>
