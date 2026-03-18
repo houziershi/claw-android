@@ -39,6 +39,7 @@ fun ChatScreen(
     val streamingText by viewModel.streamingText.collectAsState()
     val error by viewModel.error.collectAsState()
     val activeToolCalls by viewModel.activeToolCalls.collectAsState()
+    val showToolCalls by viewModel.showToolCalls.collectAsState(initial = false)
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -138,8 +139,8 @@ fun ChatScreen(
                 items(messages, key = { it.id }) { message ->
                     // Skip tool-internal messages in display
                     if (message.toolResultJson != null) return@items
-                    // Skip intermediate tool call messages (shown as active tool cards instead)
-                    if (message.toolCallsJson != null && message.content.startsWith("[Tool call:")) return@items
+                    // Skip intermediate tool call messages unless developer mode is on
+                    if (!showToolCalls && message.toolCallsJson != null && message.content.startsWith("[Tool call:")) return@items
 
                     MessageBubble(
                         content = message.content,

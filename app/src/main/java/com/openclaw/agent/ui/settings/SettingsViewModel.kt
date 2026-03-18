@@ -35,6 +35,7 @@ class SettingsViewModel @Inject constructor(
 
     val selectedModel: Flow<String> = settingsStore.selectedModelFlow
     val themeMode: Flow<String> = settingsStore.themeModeFlow
+    val showToolCalls: Flow<Boolean> = settingsStore.showToolCallsFlow
     val availableModels = SettingsStore.AVAILABLE_MODELS
     val themeModes = listOf(
         "system" to "System Default",
@@ -70,6 +71,12 @@ class SettingsViewModel @Inject constructor(
     fun selectTheme(mode: String) {
         viewModelScope.launch {
             settingsStore.saveThemeMode(mode)
+        }
+    }
+
+    fun setShowToolCalls(show: Boolean) {
+        viewModelScope.launch {
+            settingsStore.saveShowToolCalls(show)
         }
     }
 

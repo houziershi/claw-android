@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -38,6 +39,7 @@ class SettingsStore @Inject constructor(
         val SELECTED_MODEL = stringPreferencesKey("selected_model")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val SYSTEM_PROMPT = stringPreferencesKey("system_prompt")
+        val SHOW_TOOL_CALLS = booleanPreferencesKey("show_tool_calls")
     }
 
     // Encrypted API key operations (synchronous, backed by EncryptedSharedPreferences)
@@ -95,6 +97,17 @@ class SettingsStore @Inject constructor(
             } else {
                 prefs.remove(Keys.SYSTEM_PROMPT)
             }
+        }
+    }
+
+    // Show tool calls in chat
+    val showToolCallsFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[Keys.SHOW_TOOL_CALLS] ?: false
+    }
+
+    suspend fun saveShowToolCalls(show: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[Keys.SHOW_TOOL_CALLS] = show
         }
     }
 

@@ -28,6 +28,7 @@ fun SettingsScreen(
 ) {
     val selectedModel by viewModel.selectedModel.collectAsState(initial = "")
     val themeMode by viewModel.themeMode.collectAsState(initial = "system")
+    val showToolCalls by viewModel.showToolCalls.collectAsState(initial = false)
     val apiKey by viewModel.apiKey.collectAsState()
     val baseUrl by viewModel.baseUrl.collectAsState()
     val connectionTestState by viewModel.connectionTestState.collectAsState()
@@ -180,6 +181,29 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            HorizontalDivider()
+
+            // ── Developer Options ──────────────────────────────────────────
+            Text("Developer", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("显示工具调用", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "在聊天中显示 LLM 的工具调用链",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = showToolCalls,
+                    onCheckedChange = { viewModel.setShowToolCalls(it) }
+                )
             }
 
             HorizontalDivider()

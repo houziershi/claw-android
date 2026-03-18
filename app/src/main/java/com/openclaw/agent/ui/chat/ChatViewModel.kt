@@ -48,6 +48,8 @@ class ChatViewModel @Inject constructor(
     private val _activeToolCalls = MutableStateFlow<List<ToolCallUiState>>(emptyList())
     val activeToolCalls: StateFlow<List<ToolCallUiState>> = _activeToolCalls.asStateFlow()
 
+    val showToolCalls: Flow<Boolean> = settingsStore.showToolCallsFlow
+
     fun loadSession(sessionId: String) {
         currentSessionId = sessionId
         viewModelScope.launch {
