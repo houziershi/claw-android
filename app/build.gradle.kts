@@ -109,6 +109,9 @@ dependencies {
     // Security (EncryptedSharedPreferences for API key)
     implementation(libs.security.crypto)
 
+    // WorkManager
+    implementation(libs.work.runtime.ktx)
+
     // Markwon (Markdown rendering)
     implementation(libs.markwon.core)
     implementation(libs.markwon.strikethrough)

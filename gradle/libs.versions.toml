@@ -16,6 +16,7 @@ kotlinxCoroutines = "1.9.0"
 datastore = "1.1.2"
 securityCrypto = "1.1.0-alpha06"
 markwon = "4.6.2"
+workManager = "2.10.0"
 
 [libraries]
 # Core
@@ -67,6 +68,9 @@ markwon-strikethrough = { group = "io.noties.markwon", name = "ext-strikethrough
 markwon-tables = { group = "io.noties.markwon", name = "ext-tables", version.ref = "markwon" }
 markwon-tasklist = { group = "io.noties.markwon", name = "ext-tasklist", version.ref = "markwon" }
 markwon-html = { group = "io.noties.markwon", name = "html", version.ref = "markwon" }
+
+# WorkManager
+work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

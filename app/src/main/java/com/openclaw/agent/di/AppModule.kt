@@ -52,6 +52,9 @@ object AppModule {
     fun provideMessageDao(db: AppDatabase): MessageDao = db.messageDao()
 
     @Provides
+    fun provideScheduledTaskDao(db: AppDatabase): com.openclaw.agent.data.db.ScheduledTaskDao = db.scheduledTaskDao()
+
+    @Provides
     @Singleton
     fun provideDataStore(@ApplicationContext context: Context): DataStore<Preferences> =
         context.dataStore
