@@ -42,6 +42,14 @@
     <!-- Microphone (Voice input / STT) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- Query all launchable apps (for AppLauncherTool) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:name=".OpenClawApp"
         android:allowBackup="true"

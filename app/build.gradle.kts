@@ -63,6 +63,12 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true  // android.util.Log etc. return defaults in JVM tests
+        }
+    }
 }
 
 dependencies {
@@ -118,4 +124,22 @@ dependencies {
     implementation(libs.markwon.tables)
     implementation(libs.markwon.tasklist)
     implementation(libs.markwon.html)
+
+    // Testing - JVM unit tests
+    testImplementation(libs.junit)
+    testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.truth)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.mockwebserver)
+    testImplementation(libs.kotlinx.serialization.json)
+
+    // Testing - Instrumented tests
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.truth)
 }

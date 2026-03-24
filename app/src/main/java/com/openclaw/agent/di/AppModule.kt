@@ -127,6 +127,16 @@ object AppModule {
         registry.register(MemorySearchTool(memoryStore))
         registry.register(MemoryListTool(memoryStore))
 
+        // System tools (no extra permissions needed)
+        registry.register(FlashlightTool(context))
+        registry.register(AppLauncherTool(context))
+        registry.register(IntentTool(context))
+
+        // PIM tools (permissions already declared)
+        registry.register(ContactsTool(context))
+        registry.register(CalendarTool(context))
+        registry.register(LocationTool(context))
+
         // Mijia smart home tools
         registry.register(MijiaListDevicesTool(mijiaApiClient))
         registry.register(MijiaControlTool(mijiaApiClient, miotSpecCache))
