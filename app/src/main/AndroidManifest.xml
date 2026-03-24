@@ -77,6 +77,11 @@
             </intent-filter>
         </receiver>
 
+        <activity
+            android:name=".ui.mijia.MijiaLoginActivity"
+            android:theme="@style/Theme.OpenClaw"
+            android:exported="false" />
+
     </application>
 
 </manifest>

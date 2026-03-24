@@ -1,6 +1,8 @@
 package com.openclaw.agent.ui
 
+import android.content.Intent
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -8,6 +10,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.openclaw.agent.ui.chat.ChatScreen
 import com.openclaw.agent.ui.memory.MemoryScreen
+import com.openclaw.agent.ui.mijia.MijiaLoginActivity
 import com.openclaw.agent.ui.sessions.SessionListScreen
 import com.openclaw.agent.ui.settings.SettingsScreen
 import com.openclaw.agent.ui.skills.SkillsScreen
@@ -59,7 +62,13 @@ fun ClawApp() {
         }
 
         composable(Routes.SETTINGS) {
-            SettingsScreen(onBack = { navController.popBackStack() })
+            val context = LocalContext.current
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onMijiaLogin = {
+                    context.startActivity(Intent(context, MijiaLoginActivity::class.java))
+                }
+            )
         }
 
         composable(Routes.MEMORY) {

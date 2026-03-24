@@ -46,6 +46,7 @@ class AgentRuntime @Inject constructor(
         HookEngine().apply {
             register<HookEvent.UserPromptSubmit>(priority = 0, handler = SkillRouterHook(skillEngine, toolRegistry))
             register<HookEvent.PreToolUse>(priority = 0, handler = LoopDetectionHook())
+            register<HookEvent.PreToolUse>(matcher = "mijia_control", priority = 1, handler = MijiaSafetyHook())
             register<HookEvent.PostToolUse>(priority = 0, handler = ResultTruncateHook())
             register<HookEvent.PostToolUse>(priority = 1, handler = ContextGuardHook())
             

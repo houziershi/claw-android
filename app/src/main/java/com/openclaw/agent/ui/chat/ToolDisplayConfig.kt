@@ -89,6 +89,33 @@ object ToolDisplayConfig {
             displayName = "记忆列表",
             icon = Icons.AutoMirrored.Filled.FormatListBulleted,
             paramSummary = { null }
+        ),
+        "mijia_list_devices" to ToolDisplayInfo(
+            displayName = "设备列表",
+            icon = Icons.Default.Devices,
+            paramSummary = { null }
+        ),
+        "mijia_control" to ToolDisplayInfo(
+            displayName = "智能家居",
+            icon = Icons.Default.Home,
+            paramSummary = { input ->
+                val action = input["action"]?.toString()
+                val name = input["name"]?.toString()
+                val prop = input["prop"]?.toString()
+                listOfNotNull(name, prop).joinToString(" → ").takeIf { it.isNotBlank() } ?: action
+            }
+        ),
+        "mijia_device_info" to ToolDisplayInfo(
+            displayName = "设备信息",
+            icon = Icons.Default.Info,
+            paramSummary = { it["model"]?.toString() }
+        ),
+        "mijia_scene" to ToolDisplayInfo(
+            displayName = "场景",
+            icon = Icons.Default.PlayCircle,
+            paramSummary = { input ->
+                input["scene_name"]?.toString() ?: input["scene_id"]?.toString() ?: input["action"]?.toString()
+            }
         )
     )
 

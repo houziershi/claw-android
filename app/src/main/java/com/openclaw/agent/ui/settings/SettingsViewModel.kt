@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.openclaw.agent.core.llm.ClaudeClient
 import com.openclaw.agent.core.llm.LlmEvent
 import com.openclaw.agent.core.llm.LlmMessage
+import com.openclaw.agent.core.mijia.MijiaApiClient
+import com.openclaw.agent.core.mijia.MijiaAuthStore
+import com.openclaw.agent.core.mijia.MijiaTokenRefresher
 import com.openclaw.agent.data.preferences.SettingsStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -30,7 +33,10 @@ sealed class ConnectionTestState {
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val settingsStore: SettingsStore
+    private val settingsStore: SettingsStore,
+    private val mijiaAuthStore: MijiaAuthStore,
+    private val mijiaApiClient: MijiaApiClient,
+    private val mijiaTokenRefresher: MijiaTokenRefresher
 ) : ViewModel() {
 
     val selectedModel: Flow<String> = settingsStore.selectedModelFlow
@@ -51,6 +57,54 @@ class SettingsViewModel @Inject constructor(
 
     private val _connectionTestState = MutableStateFlow<ConnectionTestState>(ConnectionTestState.Idle)
     val connectionTestState: StateFlow<ConnectionTestState> = _connectionTestState.asStateFlow()
+
+    // ── Mijia ──────────────────────────────────────────────────────
+    private val _mijiaLoggedIn = MutableStateFlow(mijiaAuthStore.isAuthenticated())
+    val mijiaLoggedIn: StateFlow<Boolean> = _mijiaLoggedIn.asStateFlow()
+
+    private val _mijiaAuthChecking = MutableStateFlow(false)
+    val mijiaAuthChecking: StateFlow<Boolean> = _mijiaAuthChecking.asStateFlow()
+
+    fun refreshMijiaLoginState() {
+        _mijiaLoggedIn.value = mijiaAuthStore.isAuthenticated()
+        // If logged in but missing ssecurity, try to fetch it
+        val auth = mijiaAuthStore.load()
+        if (auth != null && auth.ssecurity.isBlank() && auth.passToken.isNotBlank()) {
+            Log.d(TAG, "Have passToken but no ssecurity, attempting to fetch...")
+            viewModelScope.launch {
+                val refreshed = mijiaTokenRefresher.refreshSsecurity()
+                if (refreshed != null) {
+                    Log.d(TAG, "ssecurity refresh successful!")
+                } else {
+                    Log.w(TAG, "ssecurity refresh failed")
+                }
+            }
+        }
+    }
+
+    fun logoutMijia() {
+        mijiaAuthStore.clear()
+        _mijiaLoggedIn.value = false
+    }
+
+    fun checkMijiaAuth() {
+        if (_mijiaAuthChecking.value) return
+        _mijiaAuthChecking.value = true
+        viewModelScope.launch {
+            try {
+                val ok = mijiaApiClient.checkAuth()
+                if (!ok) {
+                    Log.w(TAG, "Mijia auth check failed, token may be expired")
+                }
+                _mijiaLoggedIn.value = ok
+            } catch (e: Exception) {
+                Log.e(TAG, "Mijia auth check error", e)
+                _mijiaLoggedIn.value = false
+            } finally {
+                _mijiaAuthChecking.value = false
+            }
+        }
+    }
 
     fun saveApiKey(key: String) {
         settingsStore.saveApiKey(key)

@@ -8,11 +8,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -24,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onMijiaLogin: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val selectedModel by viewModel.selectedModel.collectAsState(initial = "")
@@ -32,6 +37,20 @@ fun SettingsScreen(
     val apiKey by viewModel.apiKey.collectAsState()
     val baseUrl by viewModel.baseUrl.collectAsState()
     val connectionTestState by viewModel.connectionTestState.collectAsState()
+    val mijiaLoggedIn by viewModel.mijiaLoggedIn.collectAsState()
+    val mijiaAuthChecking by viewModel.mijiaAuthChecking.collectAsState()
+
+    // Refresh Mijia login state when screen resumes (e.g. after LoginActivity)
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshMijiaLoginState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     var apiKeyInput by remember(apiKey) { mutableStateOf(apiKey) }
     var baseUrlInput by remember(baseUrl) { mutableStateOf(baseUrl) }
@@ -204,6 +223,69 @@ fun SettingsScreen(
                     checked = showToolCalls,
                     onCheckedChange = { viewModel.setShowToolCalls(it) }
                 )
+            }
+
+            HorizontalDivider()
+
+            // ── Mijia Smart Home ───────────────────────────────────────────
+            Text("米家智能家居", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Home,
+                        contentDescription = null,
+                        tint = if (mijiaLoggedIn) MaterialTheme.colorScheme.primary
+                               else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            if (mijiaLoggedIn) "已登录" else "未登录",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            if (mijiaLoggedIn) "可通过 AI 助手控制智能家居设备"
+                            else "登录后可控制米家设备",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (mijiaLoggedIn) {
+                    Row {
+                        if (mijiaAuthChecking) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            TextButton(onClick = { viewModel.checkMijiaAuth() }) {
+                                Text("验证")
+                            }
+                        }
+                        TextButton(
+                            onClick = { viewModel.logoutMijia() },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("退出")
+                        }
+                    }
+                } else {
+                    Button(onClick = onMijiaLogin) {
+                        Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("登录")
+                    }
+                }
             }
 
             HorizontalDivider()

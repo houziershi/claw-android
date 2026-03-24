@@ -10,7 +10,8 @@ class ResultTruncateHook(
         "web_search" to 3000,
         "web_fetch" to 4000,
         "memory_search" to 2000,
-        "memory_read" to 2000
+        "memory_read" to 2000,
+        "mijia_list_devices" to 3000
     )
 ) : HookHandler<HookEvent.PostToolUse> {
 

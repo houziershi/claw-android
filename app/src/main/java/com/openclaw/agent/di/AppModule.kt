@@ -7,6 +7,10 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.openclaw.agent.core.memory.FileMemoryStore
 import com.openclaw.agent.core.memory.MemoryStore
+import com.openclaw.agent.core.mijia.MijiaApiClient
+import com.openclaw.agent.core.mijia.MijiaAuthStore
+import com.openclaw.agent.core.mijia.MijiaTokenRefresher
+import com.openclaw.agent.core.mijia.MiotSpecCache
 import com.openclaw.agent.core.tools.ToolRegistry
 import com.openclaw.agent.core.tools.impl.*
 import com.openclaw.agent.data.db.AppDatabase
@@ -70,10 +74,38 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideMijiaAuthStore(@ApplicationContext context: Context): MijiaAuthStore =
+        MijiaAuthStore(context)
+
+    @Provides
+    @Singleton
+    fun provideMijiaApiClient(
+        okHttpClient: OkHttpClient,
+        authStore: MijiaAuthStore
+    ): MijiaApiClient = MijiaApiClient(okHttpClient, authStore)
+
+    @Provides
+    @Singleton
+    fun provideMijiaTokenRefresher(
+        okHttpClient: OkHttpClient,
+        authStore: MijiaAuthStore
+    ): MijiaTokenRefresher = MijiaTokenRefresher(okHttpClient, authStore)
+
+    @Provides
+    @Singleton
+    fun provideMiotSpecCache(
+        @ApplicationContext context: Context,
+        okHttpClient: OkHttpClient
+    ): MiotSpecCache = MiotSpecCache(context, okHttpClient)
+
+    @Provides
+    @Singleton
     fun provideToolRegistry(
         @ApplicationContext context: Context,
         okHttpClient: OkHttpClient,
-        memoryStore: MemoryStore
+        memoryStore: MemoryStore,
+        mijiaApiClient: MijiaApiClient,
+        miotSpecCache: MiotSpecCache
     ): ToolRegistry {
         val registry = ToolRegistry()
 
@@ -94,6 +126,12 @@ object AppModule {
         registry.register(MemoryWriteTool(memoryStore))
         registry.register(MemorySearchTool(memoryStore))
         registry.register(MemoryListTool(memoryStore))
+
+        // Mijia smart home tools
+        registry.register(MijiaListDevicesTool(mijiaApiClient))
+        registry.register(MijiaControlTool(mijiaApiClient, miotSpecCache))
+        registry.register(MijiaDeviceInfoTool(mijiaApiClient, miotSpecCache))
+        registry.register(MijiaSceneTool(mijiaApiClient))
 
         return registry
     }
