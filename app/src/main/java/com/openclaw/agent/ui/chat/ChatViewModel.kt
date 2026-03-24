@@ -8,6 +8,7 @@ import com.openclaw.agent.core.session.SessionManager
 import com.openclaw.agent.data.db.entities.MessageEntity
 import com.openclaw.agent.data.preferences.SettingsStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
@@ -31,6 +32,7 @@ class ChatViewModel @Inject constructor(
 ) : ViewModel() {
 
     private var currentSessionId: String = ""
+    private var chatJob: Job? = null
 
     private val _messages = MutableStateFlow<List<MessageEntity>>(emptyList())
     val messages: StateFlow<List<MessageEntity>> = _messages.asStateFlow()
@@ -67,7 +69,7 @@ class ChatViewModel @Inject constructor(
         _error.value = null
         _activeToolCalls.value = emptyList()
 
-        viewModelScope.launch {
+        chatJob = viewModelScope.launch {
             val model = settingsStore.selectedModelFlow.first()
             val apiKey = settingsStore.getApiKey()
             val baseUrl = settingsStore.getBaseUrl()
@@ -124,8 +126,27 @@ class ChatViewModel @Inject constructor(
                         _streamingText.value = ""
                         _activeToolCalls.value = emptyList()
                     }
+                    is AgentEvent.ThinkingChunk -> { /* not displayed */ }
+                    is AgentEvent.TextSegmentComplete -> { /* informational only */ }
                 }
             }
         }
+    }
+
+    /** Stop the current streaming response. Cancels the coroutine collecting the Flow. */
+    fun stopGeneration() {
+        chatJob?.cancel()
+        chatJob = null
+        _isStreaming.value = false
+        _activeToolCalls.value = emptyList()
+        // Keep whatever streaming text was received so far
+    }
+
+    /** Retry the last user message (for error recovery) */
+    fun retryLastMessage() {
+        val lastUserMsg = _messages.value.lastOrNull { it.role == "user" && it.toolResultJson == null }
+            ?: return
+        _error.value = null
+        sendMessage(lastUserMsg.content)
     }
 }

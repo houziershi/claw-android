@@ -4,6 +4,7 @@ import android.util.Log
 import com.openclaw.agent.core.llm.*
 import com.openclaw.agent.core.memory.MemoryContextBuilder
 import com.openclaw.agent.core.memory.MemoryStore
+import com.openclaw.agent.core.runtime.hooks.*
 import com.openclaw.agent.core.skill.SkillEngine
 import com.openclaw.agent.core.tools.ToolRegistry
 import com.openclaw.agent.core.tools.ToolRouter
@@ -12,6 +13,7 @@ import com.openclaw.agent.data.db.SessionDao
 import com.openclaw.agent.data.db.entities.MessageEntity
 import com.openclaw.agent.data.preferences.SettingsStore
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -34,6 +36,13 @@ class AgentRuntime @Inject constructor(
     private val toolRouter: ToolRouter
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    private val hookEngine = HookEngine().apply {
+        register<HookEvent.UserPromptSubmit>(priority = 0, handler = SkillRouterHook(skillEngine, toolRegistry))
+        register<HookEvent.PreToolUse>(priority = 0, handler = LoopDetectionHook())
+        register<HookEvent.PostToolUse>(priority = 0, handler = ResultTruncateHook())
+        register<HookEvent.PostToolUse>(priority = 1, handler = ContextGuardHook())
+    }
 
     /**
      * Process a user message and stream back AgentEvents.
@@ -103,8 +112,20 @@ class AgentRuntime @Inject constructor(
         // Create LLM client
         val client = createClient(apiKey, baseUrl)
 
-        // Get tool definitions
-        val toolDefs = toolRegistry.toToolDefinitions()
+        // Fire UserPromptSubmit hook — SkillRouterHook may filter tools
+        val promptDecision = runBlocking {
+            hookEngine.fire(HookEvent.UserPromptSubmit(prompt = userMessage, sessionId = sessionId))
+        }
+
+        // Get tool definitions (possibly filtered by SkillRouterHook)
+        val allToolDefs = toolRegistry.toToolDefinitions()
+        val toolDefs = if (promptDecision is HookDecision.FilterTools) {
+            val filtered = allToolDefs.filter { it.name in promptDecision.toolNames }
+            Log.d(TAG, "SkillRouter active [${promptDecision.skillName}]: ${filtered.size} tools — ${filtered.joinToString { it.name }}")
+            filtered
+        } else {
+            allToolDefs
+        }
         Log.d(TAG, "Available tools: ${toolDefs.size} — ${toolDefs.joinToString { it.name }}")
 
         // ── Function Calling Loop ──────────────────────────────────────
@@ -114,6 +135,8 @@ class AgentRuntime @Inject constructor(
         val fullAssistantText = StringBuilder()
         var consecutiveToolErrors = 0
         var lastFailedToolName = ""
+        // callHistory accumulates ToolCallRecords for LoopDetectionHook
+        val callHistory = mutableListOf<ToolCallRecord>()
 
         while (loopCount < MAX_TOOL_LOOPS) {
             loopCount++
@@ -191,7 +214,8 @@ class AgentRuntime @Inject constructor(
                         content = currentText.toString(),
                         timestamp = System.currentTimeMillis(),
                         inputTokens = totalInputTokens,
-                        outputTokens = totalOutputTokens
+                        outputTokens = totalOutputTokens,
+                        model = model
                     )
                     messageDao.insertMessage(assistantMsg)
                     sessionDao.incrementMessageCount(sessionId, System.currentTimeMillis())
@@ -207,7 +231,7 @@ class AgentRuntime @Inject constructor(
                     Log.w(TAG, "Failed to record daily note", e)
                 }
 
-                emit(AgentEvent.TurnComplete(fullAssistantText.toString(), totalInputTokens, totalOutputTokens))
+                emit(AgentEvent.TurnComplete(fullAssistantText.toString(), Usage(totalInputTokens, totalOutputTokens), model))
                 return@flow
             }
 
@@ -256,13 +280,89 @@ class AgentRuntime @Inject constructor(
                 val tc: PendingToolCall,
                 val result: com.openclaw.agent.core.tools.ToolResult
             )
-            val execResults = pendingToolCalls.map { tc ->
+            val execResults = mutableListOf<ToolExecResult>()
+            for (tc in pendingToolCalls) {
+                // Fire PreToolUse hook for loop detection
+                val preDecision = runBlocking {
+                    hookEngine.fire(HookEvent.PreToolUse(
+                        toolName = tc.name,
+                        toolInput = tc.args,
+                        turnIndex = loopCount,
+                        callHistory = callHistory.toList()
+                    ))
+                }
+
+                // Handle loop detection decisions
+                when (preDecision) {
+                    is HookDecision.Block -> {
+                        Log.w(TAG, "PreToolUse BLOCK for ${tc.name}: ${preDecision.reason}")
+                        emit(AgentEvent.Error(preDecision.reason))
+                        return@flow
+                    }
+                    is HookDecision.Deny -> {
+                        Log.w(TAG, "PreToolUse DENY for ${tc.name}: ${preDecision.reason}")
+                        // Inject a synthetic error result so the LLM knows to try something else
+                        val syntheticResult = com.openclaw.agent.core.tools.ToolResult(
+                            success = false,
+                            content = "",
+                            errorMessage = "[loop guard] ${preDecision.reason}"
+                        )
+                        execResults.add(ToolExecResult(tc, syntheticResult))
+                        emit(AgentEvent.ToolCallFinished(
+                            id = tc.id, name = tc.name, input = tc.args,
+                            result = "[loop guard] ${preDecision.reason}", success = false
+                        ))
+                        continue
+                    }
+                    else -> { /* Allow / other: proceed */ }
+                }
+
+                val startTime = System.currentTimeMillis()
                 val result = toolRouter.execute(tc.name, tc.args)
+                val duration = System.currentTimeMillis() - startTime
                 Log.d(TAG, "Tool ${tc.name} result: success=${result.success}, content=${result.content.take(200)}")
-                ToolExecResult(tc, result)
+
+                // Fire PostToolUse hook for result truncation / context guard
+                val postDecision = runBlocking {
+                    hookEngine.fire(HookEvent.PostToolUse(
+                        toolName = tc.name,
+                        toolInput = tc.args,
+                        toolResult = if (result.success) result.content else (result.errorMessage ?: ""),
+                        success = result.success,
+                        durationMs = duration
+                    ))
+                }
+                val finalContent = when (postDecision) {
+                    is HookDecision.ModifyResult -> postDecision.newResult
+                    else -> if (result.success) result.content else (result.errorMessage ?: "")
+                }
+                val finalResult = if (postDecision is HookDecision.ModifyResult) {
+                    com.openclaw.agent.core.tools.ToolResult(result.success, finalContent, result.errorMessage)
+                } else {
+                    result
+                }
+
+                // Record in callHistory for loop detection
+                callHistory.add(ToolCallRecord(
+                    name = tc.name,
+                    argsHash = tc.args.hashCode(),
+                    resultHash = finalContent.hashCode(),
+                    timestamp = System.currentTimeMillis()
+                ))
+
+                // Emit ToolCallFinished for normal (non-denied) executions
+                emit(AgentEvent.ToolCallFinished(
+                    id = tc.id,
+                    name = tc.name,
+                    input = tc.args,
+                    result = if (finalResult.success) finalResult.content else (finalResult.errorMessage ?: "Unknown error"),
+                    success = finalResult.success
+                ))
+
+                execResults.add(ToolExecResult(tc, finalResult))
             }
 
-            // Emit tool finished events + detect repeated failures
+            // Detect repeated tool failures (consecutive errors)
             val allFailed = execResults.all { !it.result.success }
             val failedToolNames = execResults.filter { !it.result.success }.map { it.tc.name }
             
@@ -282,16 +382,6 @@ class AgentRuntime @Inject constructor(
             } else {
                 consecutiveToolErrors = 0
                 lastFailedToolName = ""
-            }
-
-            execResults.forEach { (tc, result) ->
-                emit(AgentEvent.ToolCallFinished(
-                    id = tc.id,
-                    name = tc.name,
-                    input = tc.args,
-                    result = if (result.success) result.content else (result.errorMessage ?: "Unknown error"),
-                    success = result.success
-                ))
             }
 
             // Build tool result JSON blocks

@@ -10,7 +10,7 @@ import com.openclaw.agent.data.db.entities.SessionEntity
 
 @Database(
     entities = [SessionEntity::class, MessageEntity::class, ScheduledTaskEntity::class],
-    version = 2,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -41,6 +41,29 @@ abstract class AppDatabase : RoomDatabase() {
                         nextRunAt INTEGER NOT NULL
                     )
                 """.trimIndent())
+            }
+        }
+
+        /** v2 → v3: add group chat fields (non-destructive) */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // MessageEntity: add senderType, senderName, mentions
+                db.execSQL("ALTER TABLE messages ADD COLUMN senderType TEXT NOT NULL DEFAULT 'user'")
+                db.execSQL("ALTER TABLE messages ADD COLUMN senderName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE messages ADD COLUMN mentions TEXT")
+                // SessionEntity: add chatType
+                db.execSQL("ALTER TABLE sessions ADD COLUMN chatType TEXT NOT NULL DEFAULT 'single'")
+            }
+        }
+
+        /** v3 → v4: add content blocks, model, cache tokens, and cost columns */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN contentBlocks TEXT")
+                db.execSQL("ALTER TABLE messages ADD COLUMN model TEXT")
+                db.execSQL("ALTER TABLE messages ADD COLUMN cacheReadTokens INTEGER")
+                db.execSQL("ALTER TABLE messages ADD COLUMN cacheWriteTokens INTEGER")
+                db.execSQL("ALTER TABLE messages ADD COLUMN costTotal REAL")
             }
         }
     }

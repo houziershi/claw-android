@@ -31,5 +31,18 @@ data class MessageEntity(
     val timestamp: Long,
     val inputTokens: Int? = null,
     val outputTokens: Int? = null,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    /** Sender type for group chat: "user" | "claw" | "nanobot" */
+    val senderType: String = "user",
+    /** Display name of the sender */
+    val senderName: String = "",
+    /** JSON array of mentioned bot names, e.g. ["claw","nanobot"] */
+    val mentions: String? = null,
+    /** JSON-encoded List<ContentBlock> */
+    val contentBlocks: String? = null,
+    /** Model name used to generate this message */
+    val model: String? = null,
+    val cacheReadTokens: Int? = null,
+    val cacheWriteTokens: Int? = null,
+    val costTotal: Double? = null
 )

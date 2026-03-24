@@ -17,6 +17,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +45,10 @@ fun ChatScreen(
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+
+    // ── Tool output sheet state ──────────────────────────────────────────
+    var selectedToolCall by remember { mutableStateOf<ToolCallUiState?>(null) }
+    val showToolSheet = selectedToolCall != null
 
     // ── Voice input (STT) state ──────────────────────────────────────────
     val context = LocalContext.current
@@ -100,11 +106,11 @@ fun ChatScreen(
     LaunchedEffect(messages.size, streamingText, activeToolCalls.size) {
         if (messages.isNotEmpty()) {
             scope.launch {
-                // Calculate total items: messages + tool calls + streaming bubble + thinking
+                val chatItems = ChatItemBuilder.build(messages, showToolCalls)
                 val extraItems = (if (activeToolCalls.isNotEmpty()) 1 else 0) +
                     (if (isStreaming && streamingText.isNotEmpty()) 1 else 0) +
                     (if (isStreaming && streamingText.isEmpty() && activeToolCalls.isEmpty()) 1 else 0)
-                listState.animateScrollToItem(maxOf(0, messages.size - 1 + extraItems))
+                listState.animateScrollToItem(maxOf(0, chatItems.size - 1 + extraItems))
             }
         }
     }
@@ -127,6 +133,11 @@ fun ChatScreen(
                 .padding(padding)
                 .imePadding()
         ) {
+            // Build structured ChatItems from raw messages
+            val chatItems = remember(messages, showToolCalls) {
+                ChatItemBuilder.build(messages, showToolCalls)
+            }
+
             // Messages list
             LazyColumn(
                 modifier = Modifier
@@ -136,29 +147,27 @@ fun ChatScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages, key = { it.id }) { message ->
-                    // Skip tool-internal messages in display
-                    if (message.toolResultJson != null) return@items
-                    // Skip intermediate tool call messages unless developer mode is on
-                    if (!showToolCalls && message.toolCallsJson != null && message.content.startsWith("[Tool call:")) return@items
-
-                    MessageBubble(
-                        content = message.content,
-                        isUser = message.role == "user",
-                        isError = message.isError
-                    )
+                items(chatItems.size, key = { chatItems[it].key }) { index ->
+                    when (val item = chatItems[index]) {
+                        is ChatItem.DateSeparator -> {
+                            DateDivider(date = item.date)
+                        }
+                        is ChatItem.MessageGroup -> {
+                            MessageGroupView(group = item)
+                        }
+                        is ChatItem.ToolCallsBlock -> {
+                            // Reserved for future: historical tool calls from DB
+                        }
+                    }
                 }
 
-                // Active tool calls
+                // Active tool calls (collapsible)
                 if (activeToolCalls.isNotEmpty()) {
                     item(key = "tool_calls") {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            activeToolCalls.forEach { tc ->
-                                ToolCallCard(toolCall = tc)
-                            }
-                        }
+                        CollapsibleToolCards(
+                            toolCalls = activeToolCalls,
+                            onToolClick = { selectedToolCall = it }
+                        )
                     }
                 }
 
@@ -173,40 +182,44 @@ fun ChatScreen(
                     }
                 }
 
-                // Thinking indicator
+                // Thinking indicator (three-dot bounce)
                 if (isStreaming && streamingText.isEmpty() && activeToolCalls.isEmpty()) {
                     item(key = "thinking") {
-                        Row(
-                            modifier = Modifier.padding(start = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "Thinking...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        ReadingIndicator(
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
                     }
                 }
             }
 
-            // Error banner
+            // Error banner with Retry button
             error?.let { errorMsg ->
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        errorMsg,
-                        modifier = Modifier.padding(12.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            errorMsg,
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        TextButton(
+                            onClick = { viewModel.retryLastMessage() }
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("重试")
+                        }
+                    }
                 }
             }
 
@@ -253,20 +266,39 @@ fun ChatScreen(
                         )
                     }
 
-                    // Send button
-                    FilledIconButton(
-                        onClick = {
-                            if (inputText.isNotBlank()) {
-                                viewModel.sendMessage(inputText.trim())
-                                inputText = ""
-                            }
-                        },
-                        enabled = inputText.isNotBlank() && !isStreaming
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, "Send")
+                    // Send / Stop button
+                    if (isStreaming) {
+                        FilledIconButton(
+                            onClick = { viewModel.stopGeneration() },
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(Icons.Default.Stop, "Stop")
+                        }
+                    } else {
+                        FilledIconButton(
+                            onClick = {
+                                if (inputText.isNotBlank()) {
+                                    viewModel.sendMessage(inputText.trim())
+                                    inputText = ""
+                                }
+                            },
+                            enabled = inputText.isNotBlank()
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Send, "Send")
+                        }
                     }
                 }
             }
+        }
+
+        // ── Tool Output BottomSheet ──────────────────────────────────────────
+        if (showToolSheet && selectedToolCall != null) {
+            ToolOutputSheet(
+                toolCall = selectedToolCall!!,
+                onDismiss = { selectedToolCall = null }
+            )
         }
     }
 }
