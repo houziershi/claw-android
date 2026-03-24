@@ -23,6 +23,7 @@ import javax.inject.Singleton
 
 private const val TAG = "AgentRuntime"
 private const val MAX_TOOL_LOOPS = 10
+private const val MAX_RATE_LIMIT_RETRIES = 3
 
 @Singleton
 class AgentRuntime @Inject constructor(
@@ -33,15 +34,27 @@ class AgentRuntime @Inject constructor(
     private val sessionDao: SessionDao,
     private val messageDao: MessageDao,
     private val toolRegistry: ToolRegistry,
-    private val toolRouter: ToolRouter
+    private val toolRouter: ToolRouter,
+    private val twoPhaseRouter: TwoPhaseRouter,
+    private val contextCompactor: ContextCompactor,
+    private val apiKeyManager: ApiKeyManager,
+    private val userHookRegistry: UserHookRegistry
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    private val hookEngine = HookEngine().apply {
-        register<HookEvent.UserPromptSubmit>(priority = 0, handler = SkillRouterHook(skillEngine, toolRegistry))
-        register<HookEvent.PreToolUse>(priority = 0, handler = LoopDetectionHook())
-        register<HookEvent.PostToolUse>(priority = 0, handler = ResultTruncateHook())
-        register<HookEvent.PostToolUse>(priority = 1, handler = ContextGuardHook())
+    private val hookEngine by lazy {
+        HookEngine().apply {
+            register<HookEvent.UserPromptSubmit>(priority = 0, handler = SkillRouterHook(skillEngine, toolRegistry))
+            register<HookEvent.PreToolUse>(priority = 0, handler = LoopDetectionHook())
+            register<HookEvent.PostToolUse>(priority = 0, handler = ResultTruncateHook())
+            register<HookEvent.PostToolUse>(priority = 1, handler = ContextGuardHook())
+            
+            // Register user-defined hooks if enabled
+            val userHooksEnabled = runBlocking { settingsStore.userHooksEnabledFlow.first() }
+            if (userHooksEnabled) {
+                register<HookEvent.PreToolUse>(priority = 100, handler = UserDefinedHook(userHookRegistry))
+            }
+        }
     }
 
     /**
@@ -55,7 +68,13 @@ class AgentRuntime @Inject constructor(
         apiKey: String,
         baseUrl: String = "https://api.anthropic.com/v1/messages"
     ): Flow<AgentEvent> = flow {
-        if (apiKey.isBlank()) {
+        // Phase 7.3: API key rotation
+        apiKeyManager.reset()
+        val primaryKeyEntry = apiKeyManager.getCurrentKey()
+        var effectiveApiKey = primaryKeyEntry.apiKey.ifBlank { apiKey }
+        var effectiveBaseUrl = primaryKeyEntry.baseUrl.ifBlank { baseUrl }
+        
+        if (effectiveApiKey.isBlank()) {
             emit(AgentEvent.Error("API key not set. Go to Settings to add your API key."))
             return@flow
         }
@@ -83,7 +102,7 @@ class AgentRuntime @Inject constructor(
 
         // Build conversation history from DB
         val dbMessages = messageDao.getMessagesForSessionOnce(sessionId)
-        val conversationHistory = dbMessages.map { msg ->
+        val rawHistory = dbMessages.map { msg ->
             when {
                 // Tool result messages: reconstruct as tool_result content blocks
                 msg.role == "user" && msg.toolResultJson != null -> {
@@ -107,10 +126,15 @@ class AgentRuntime @Inject constructor(
                     )
                 }
             }
-        }.toMutableList()
+        }
 
-        // Create LLM client
-        val client = createClient(apiKey, baseUrl)
+        // Phase 7.2: Context compaction
+        val compactionEnabled = runBlocking { settingsStore.contextCompactionEnabledFlow.first() }
+        val conversationHistory = if (compactionEnabled) {
+            runBlocking { contextCompactor.compact(rawHistory, effectiveApiKey, effectiveBaseUrl, model) }.toMutableList()
+        } else {
+            rawHistory.toMutableList()
+        }
 
         // Fire UserPromptSubmit hook — SkillRouterHook may filter tools
         val promptDecision = runBlocking {
@@ -126,7 +150,19 @@ class AgentRuntime @Inject constructor(
         } else {
             allToolDefs
         }
-        Log.d(TAG, "Available tools: ${toolDefs.size} — ${toolDefs.joinToString { it.name }}")
+
+        // Phase 7.1: Two-phase routing (if enabled)
+        val twoPhaseEnabled = runBlocking { settingsStore.twoPhaseRoutingEnabledFlow.first() }
+        val finalToolDefs = if (twoPhaseEnabled) {
+            val routedTools = runBlocking { twoPhaseRouter.route(userMessage, effectiveApiKey, effectiveBaseUrl, model) }
+            if (routedTools != null) {
+                val filtered = toolDefs.filter { it.name in routedTools }
+                Log.d(TAG, "TwoPhaseRouter: filtered to ${filtered.size} tools: ${filtered.joinToString { it.name }}")
+                filtered.ifEmpty { toolDefs }
+            } else toolDefs
+        } else toolDefs
+        
+        Log.d(TAG, "Available tools: ${finalToolDefs.size} — ${finalToolDefs.joinToString { it.name }}")
 
         // ── Function Calling Loop ──────────────────────────────────────
         var loopCount = 0
@@ -146,58 +182,82 @@ class AgentRuntime @Inject constructor(
             var stopReason = "end_turn"
             var inputTokens = 0
             var outputTokens = 0
-
-            // Collect tool calls from this turn
             val pendingToolCalls = mutableListOf<PendingToolCall>()
-            var currentToolId = ""
-            var currentToolName = ""
-            val currentToolInput = StringBuilder()
             var hasError = false
 
-            client.chat(
-                messages = conversationHistory,
-                systemPrompt = systemPrompt,
-                tools = toolDefs,
-                model = model
-            ).collect { event ->
-                when (event) {
-                    is LlmEvent.TextChunk -> {
-                        currentText.append(event.text)
-                        fullAssistantText.append(event.text)
-                        emit(AgentEvent.TextChunk(event.text))
-                    }
-                    is LlmEvent.ToolCallStart -> {
-                        currentToolId = event.id
-                        currentToolName = event.name
-                        currentToolInput.clear()
-                        Log.d(TAG, "Tool call started: ${event.name} (${event.id})")
-                        emit(AgentEvent.ToolCallStarted(event.id, event.name))
-                    }
-                    is LlmEvent.ToolCallInput -> {
-                        currentToolInput.append(event.partialJson)
-                    }
-                    is LlmEvent.ToolCallComplete -> {
-                        Log.d(TAG, "Tool call complete: ${event.name} args=${event.input}")
-                        pendingToolCalls.add(
-                            PendingToolCall(event.id, event.name, event.input)
-                        )
-                        currentToolId = ""
-                        currentToolName = ""
-                        currentToolInput.clear()
-                    }
-                    is LlmEvent.Done -> {
-                        stopReason = event.stopReason
-                        inputTokens = event.inputTokens
-                        outputTokens = event.outputTokens
-                        totalInputTokens += inputTokens
-                        totalOutputTokens += outputTokens
-                    }
-                    is LlmEvent.Error -> {
-                        emit(AgentEvent.Error(event.message))
-                        hasError = true
+            // Phase 7.3: Rate-limit retry loop
+            var rlRetries = 0
+            var rateLimited: Boolean
+            do {
+                rateLimited = false
+                currentText.clear()
+                pendingToolCalls.clear()
+                stopReason = "end_turn"
+                inputTokens = 0
+                outputTokens = 0
+                var currentToolId = ""
+                var currentToolName = ""
+                val currentToolInput = StringBuilder()
+
+                val rlEntry = apiKeyManager.getCurrentKey()
+                val callApiKey = rlEntry.apiKey.ifBlank { effectiveApiKey }
+                val callBaseUrl = rlEntry.baseUrl.ifBlank { effectiveBaseUrl }
+
+                createClient(callApiKey, callBaseUrl).chat(
+                    messages = conversationHistory,
+                    systemPrompt = systemPrompt,
+                    tools = finalToolDefs,
+                    model = model
+                ).collect { event ->
+                    when (event) {
+                        is LlmEvent.TextChunk -> {
+                            currentText.append(event.text)
+                            fullAssistantText.append(event.text)
+                            emit(AgentEvent.TextChunk(event.text))
+                        }
+                        is LlmEvent.ToolCallStart -> {
+                            currentToolId = event.id
+                            currentToolName = event.name
+                            currentToolInput.clear()
+                            Log.d(TAG, "Tool call started: ${event.name} (${event.id})")
+                            emit(AgentEvent.ToolCallStarted(event.id, event.name))
+                        }
+                        is LlmEvent.ToolCallInput -> {
+                            currentToolInput.append(event.partialJson)
+                        }
+                        is LlmEvent.ToolCallComplete -> {
+                            Log.d(TAG, "Tool call complete: ${event.name} args=${event.input}")
+                            pendingToolCalls.add(PendingToolCall(event.id, event.name, event.input))
+                            currentToolId = ""
+                            currentToolName = ""
+                            currentToolInput.clear()
+                        }
+                        is LlmEvent.Done -> {
+                            stopReason = event.stopReason
+                            inputTokens = event.inputTokens
+                            outputTokens = event.outputTokens
+                            totalInputTokens += inputTokens
+                            totalOutputTokens += outputTokens
+                        }
+                        is LlmEvent.Error -> {
+                            val isRateLimit = event.code == 429 || event.code == 529
+                            if (isRateLimit && rlRetries < MAX_RATE_LIMIT_RETRIES && !apiKeyManager.isExhausted()) {
+                                Log.w(TAG, "Rate limit (${event.code}), rotating key (attempt $rlRetries)")
+                                rateLimited = true
+                            } else {
+                                emit(AgentEvent.Error(event.message))
+                                hasError = true
+                            }
+                        }
                     }
                 }
-            }
+
+                if (rateLimited) {
+                    apiKeyManager.onRateLimit()
+                    rlRetries++
+                    Log.d(TAG, "Retrying with key: ${apiKeyManager.getCurrentKey().label}")
+                }
+            } while (rateLimited && rlRetries <= MAX_RATE_LIMIT_RETRIES)
 
             if (hasError) return@flow
 

@@ -40,6 +40,9 @@ class SettingsStore @Inject constructor(
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val SYSTEM_PROMPT = stringPreferencesKey("system_prompt")
         val SHOW_TOOL_CALLS = booleanPreferencesKey("show_tool_calls")
+        val TWO_PHASE_ROUTING = booleanPreferencesKey("two_phase_routing")
+        val CONTEXT_COMPACTION = booleanPreferencesKey("context_compaction")
+        val USER_HOOKS_ENABLED = booleanPreferencesKey("user_hooks_enabled")
     }
 
     // Encrypted API key operations (synchronous, backed by EncryptedSharedPreferences)
@@ -111,9 +114,56 @@ class SettingsStore @Inject constructor(
         }
     }
 
+    // Two-phase routing
+    val twoPhaseRoutingEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[Keys.TWO_PHASE_ROUTING] ?: false
+    }
+
+    suspend fun saveTwoPhaseRoutingEnabled(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[Keys.TWO_PHASE_ROUTING] = enabled }
+    }
+
+    // Context compaction
+    val contextCompactionEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[Keys.CONTEXT_COMPACTION] ?: true
+    }
+
+    suspend fun saveContextCompactionEnabled(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[Keys.CONTEXT_COMPACTION] = enabled }
+    }
+
+    // User hooks enabled
+    val userHooksEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[Keys.USER_HOOKS_ENABLED] ?: false
+    }
+
+    suspend fun saveUserHooksEnabled(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[Keys.USER_HOOKS_ENABLED] = enabled }
+    }
+
+    // Extra API keys (stored in EncryptedSharedPreferences as JSON)
+    fun getExtraApiKeys(): List<com.openclaw.agent.core.llm.ApiKeyEntry> {
+        val rawJson = encryptedPrefs.getString(PREF_EXTRA_API_KEYS, null) ?: return emptyList()
+        return try {
+            kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                .decodeFromString<List<com.openclaw.agent.core.llm.ApiKeyEntry>>(rawJson)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveExtraApiKeys(keys: List<com.openclaw.agent.core.llm.ApiKeyEntry>) {
+        val rawJson = kotlinx.serialization.json.Json.encodeToString(
+            kotlinx.serialization.builtins.ListSerializer(com.openclaw.agent.core.llm.ApiKeyEntry.serializer()),
+            keys
+        )
+        encryptedPrefs.edit().putString(PREF_EXTRA_API_KEYS, rawJson).apply()
+    }
+
     companion object {
         private const val PREF_API_KEY = "claude_api_key"
         private const val PREF_API_BASE_URL = "api_base_url"
+        private const val PREF_EXTRA_API_KEYS = "extra_api_keys"
 
         const val DEFAULT_MODEL = "k2p5"
         const val DEFAULT_API_KEY = "sk-kimi-KuvCIk4Jp4Jqp2GFEyz0PAIObkDWTMzyiI4pOTgpAKGkU0aKBCto6ifh5AtQ3nxm"

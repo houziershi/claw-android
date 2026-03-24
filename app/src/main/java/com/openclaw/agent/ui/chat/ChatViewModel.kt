@@ -1,5 +1,6 @@
 package com.openclaw.agent.ui.chat
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openclaw.agent.core.runtime.AgentEvent
@@ -13,6 +14,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import javax.inject.Inject
+
+private const val TAG = "ChatViewModel"
 
 /** Represents a tool call in progress or completed, for UI display */
 data class ToolCallUiState(
@@ -128,6 +131,12 @@ class ChatViewModel @Inject constructor(
                     }
                     is AgentEvent.ThinkingChunk -> { /* not displayed */ }
                     is AgentEvent.TextSegmentComplete -> { /* informational only */ }
+                    is AgentEvent.ConfirmRequired -> {
+                        // User hook confirmation required (Phase 7.4)
+                        Log.d(TAG, "Hook confirmation required: ${event.message}")
+                        // TODO: implement UI prompt for user confirmation
+                        // For now, just log it
+                    }
                 }
             }
         }

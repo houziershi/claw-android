@@ -42,4 +42,7 @@ sealed class AgentEvent {
 
     /** The agent is thinking (processing tool results, about to call LLM again) */
     object Thinking : AgentEvent()
+
+    /** User confirmation required for a hook-guarded tool (Phase 7.4) */
+    data class ConfirmRequired(val toolName: String, val message: String, val hookId: String) : AgentEvent()
 }
