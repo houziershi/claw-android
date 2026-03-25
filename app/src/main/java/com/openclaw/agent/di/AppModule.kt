@@ -141,6 +141,12 @@ object AppModule {
         registry.register(LocationTool(context))
         registry.register(MediaTool(context))
 
+        // Notification & system tools
+        registry.register(NotificationTool(context))
+        registry.register(UsageStatsTool(context))
+        registry.register(ScreenCaptureTool(context))
+        registry.register(SystemActionTool(context))
+
         // Mijia smart home tools
         registry.register(MijiaListDevicesTool(mijiaApiClient))
         registry.register(MijiaControlTool(mijiaApiClient, miotSpecCache))
