@@ -15,8 +15,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.openclaw.agent.ui.theme.ClawShapes
+import com.openclaw.agent.ui.theme.ClawSpacing
+import com.openclaw.agent.ui.theme.Neutral800
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,7 +107,7 @@ fun MemoryScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
-                        .padding(16.dp)
+                        .padding(ClawSpacing.lg)
                 ) {
                     OutlinedTextField(
                         value = searchQuery,
@@ -120,14 +122,14 @@ fun MemoryScreen(
                         }
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(ClawSpacing.md))
 
                     if (isSearching) {
                         Box(
                             modifier = Modifier.fillMaxWidth(),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(ClawSpacing.xl))
                         }
                     } else if (searchResults.isNotEmpty()) {
                         Text(
@@ -135,8 +137,8 @@ fun MemoryScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Spacer(modifier = Modifier.height(ClawSpacing.sm))
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(ClawSpacing.sm)) {
                             items(searchResults) { snippet ->
                                 SearchResultCard(
                                     snippet = snippet,
@@ -165,9 +167,13 @@ fun MemoryScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
-                        .padding(16.dp),
+                        .padding(ClawSpacing.lg),
                     textStyle = MaterialTheme.typography.bodyMedium.copy(
                         fontFamily = FontFamily.Monospace
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = Neutral800,
+                        focusedContainerColor = Neutral800
                     )
                 )
             }
@@ -179,7 +185,7 @@ fun MemoryScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
-                        .padding(16.dp)
+                        .padding(ClawSpacing.lg)
                         .verticalScroll(rememberScrollState()),
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontFamily = FontFamily.Monospace
@@ -196,6 +202,9 @@ fun MemoryScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
+                        .padding(horizontal = ClawSpacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(ClawSpacing.sm),
+                    contentPadding = PaddingValues(vertical = ClawSpacing.sm)
                 ) {
                     // Core files section
                     if (coreFiles.isNotEmpty()) {
@@ -203,7 +212,7 @@ fun MemoryScreen(
                             Text(
                                 "📋 Core Files",
                                 style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                modifier = Modifier.padding(bottom = ClawSpacing.xs),
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -224,11 +233,11 @@ fun MemoryScreen(
                     // Daily notes section
                     if (dailyFiles.isNotEmpty()) {
                         item {
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(ClawSpacing.sm))
                             Text(
                                 "📅 Daily Notes (${dailyFiles.size})",
                                 style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                modifier = Modifier.padding(bottom = ClawSpacing.xs),
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -247,7 +256,7 @@ fun MemoryScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(32.dp),
+                                    .padding(ClawSpacing.xxl),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -270,20 +279,42 @@ private fun MemoryFileItem(
     icon: String,
     onClick: () -> Unit
 ) {
-    ListItem(
-        headlineContent = {
-            Text("$icon  $file")
-        },
-        modifier = Modifier.clickable(onClick = onClick),
-        trailingContent = {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = ClawShapes.card,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(ClawSpacing.lg),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(ClawSpacing.sm),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(icon, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    file,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-    )
-    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+    }
 }
 
 @Composable
@@ -295,11 +326,12 @@ private fun SearchResultCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
+        shape = ClawShapes.card,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         )
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(ClawSpacing.md)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -315,7 +347,7 @@ private fun SearchResultCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(ClawSpacing.xs))
             Text(
                 snippet.content.take(200),
                 style = MaterialTheme.typography.bodySmall,

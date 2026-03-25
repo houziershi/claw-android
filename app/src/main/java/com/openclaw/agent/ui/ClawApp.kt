@@ -1,6 +1,12 @@
 package com.openclaw.agent.ui
 
 import android.content.Intent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
@@ -25,13 +31,51 @@ object Routes {
     fun chat(sessionId: String) = "chat/$sessionId"
 }
 
+private val enterTransition = { initialOffsetX: (Int) -> Int ->
+    slideInHorizontally(
+        initialOffsetX = initialOffsetX,
+        animationSpec = tween(300, easing = FastOutSlowInEasing)
+    ) + fadeIn(animationSpec = tween(300, easing = FastOutSlowInEasing))
+}
+
+private val exitTransition = { targetOffsetX: (Int) -> Int ->
+    slideOutHorizontally(
+        targetOffsetX = targetOffsetX,
+        animationSpec = tween(300, easing = FastOutSlowInEasing)
+    ) + fadeOut(animationSpec = tween(300, easing = FastOutSlowInEasing))
+}
+
 @Composable
 fun ClawApp() {
     val navController = rememberNavController()
 
     NavHost(
         navController = navController,
-        startDestination = Routes.SESSIONS
+        startDestination = Routes.SESSIONS,
+        enterTransition = {
+            slideInHorizontally(
+                initialOffsetX = { it },
+                animationSpec = tween(300, easing = FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(300, easing = FastOutSlowInEasing))
+        },
+        exitTransition = {
+            slideOutHorizontally(
+                targetOffsetX = { -it },
+                animationSpec = tween(300, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(300, easing = FastOutSlowInEasing))
+        },
+        popEnterTransition = {
+            slideInHorizontally(
+                initialOffsetX = { -it },
+                animationSpec = tween(300, easing = FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(300, easing = FastOutSlowInEasing))
+        },
+        popExitTransition = {
+            slideOutHorizontally(
+                targetOffsetX = { it },
+                animationSpec = tween(300, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(300, easing = FastOutSlowInEasing))
+        }
     ) {
         composable(Routes.SESSIONS) {
             SessionListScreen(

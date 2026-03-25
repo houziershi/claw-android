@@ -15,9 +15,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.openclaw.agent.core.skill.Skill
+import com.openclaw.agent.ui.theme.ClawShapes
+import com.openclaw.agent.ui.theme.ClawSpacing
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -85,13 +86,16 @@ fun SkillsScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
+                        .padding(horizontal = ClawSpacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(ClawSpacing.sm),
+                    contentPadding = PaddingValues(vertical = ClawSpacing.sm)
                 ) {
                     item {
                         Text(
                             "Skills are activated automatically when your message matches trigger keywords.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            modifier = Modifier.padding(bottom = ClawSpacing.xs)
                         )
                     }
                     items(skills) { skill ->
@@ -113,30 +117,43 @@ private fun SkillListItem(
     onToggle: (Boolean) -> Unit,
     onClick: () -> Unit
 ) {
-    ListItem(
-        headlineContent = {
-            Text(
-                "${skillIcon(skill.name)}  ${skill.name}",
-                style = MaterialTheme.typography.titleSmall
-            )
-        },
-        supportingContent = {
-            Text(
-                skill.description,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall
-            )
-        },
-        trailingContent = {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = ClawShapes.card,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(ClawSpacing.lg),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "${skillIcon(skill.name)}  ${skill.name}",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(modifier = Modifier.height(ClawSpacing.xs))
+                Text(
+                    skill.description,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Switch(
                 checked = skill.enabled,
-                onCheckedChange = onToggle
+                onCheckedChange = onToggle,
+                modifier = Modifier.padding(start = ClawSpacing.sm)
             )
-        },
-        modifier = Modifier.clickable(onClick = onClick)
-    )
-    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -148,8 +165,8 @@ private fun SkillDetailView(
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(ClawSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(ClawSpacing.lg)
     ) {
         // Header
         Text(
@@ -166,6 +183,7 @@ private fun SkillDetailView(
 
         // Status
         Card(
+            shape = ClawShapes.card,
             colors = CardDefaults.cardColors(
                 containerColor = if (skill.enabled)
                     MaterialTheme.colorScheme.primaryContainer
@@ -176,7 +194,7 @@ private fun SkillDetailView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(ClawSpacing.md),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -191,8 +209,8 @@ private fun SkillDetailView(
         if (skill.triggers.isNotEmpty()) {
             Text("🎯 Triggers", style = MaterialTheme.typography.titleSmall)
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(ClawSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(ClawSpacing.xs)
             ) {
                 skill.triggers.forEach { trigger ->
                     AssistChip(
@@ -210,7 +228,7 @@ private fun SkillDetailView(
                 Text(
                     "• $tool",
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(start = 8.dp)
+                    modifier = Modifier.padding(start = ClawSpacing.sm)
                 )
             }
         }
@@ -219,6 +237,7 @@ private fun SkillDetailView(
         if (skill.systemPrompt.isNotBlank()) {
             Text("📝 System Prompt", style = MaterialTheme.typography.titleSmall)
             Card(
+                shape = ClawShapes.card,
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 )
@@ -228,7 +247,7 @@ private fun SkillDetailView(
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontFamily = FontFamily.Monospace
                     ),
-                    modifier = Modifier.padding(12.dp)
+                    modifier = Modifier.padding(ClawSpacing.md)
                 )
             }
         }
