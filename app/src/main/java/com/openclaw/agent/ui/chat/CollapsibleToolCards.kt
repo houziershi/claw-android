@@ -18,13 +18,15 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.serialization.json.JsonObject
+import com.openclaw.agent.ui.theme.ClawShapes
+import com.openclaw.agent.ui.theme.ClawSpacing
+import com.openclaw.agent.ui.theme.Success
 
 /**
  * Collapsible tool call group.
  *
- * Collapsed: "▸ ⚡ 搜索, 音量 +2 more" (single line)
- * Expanded: shows each tool with status, params, and result preview.
+ * Collapsed: "▸ ⚡ 2 tools · search, volume" (single line)
+ * Expanded: each tool with status, params, and result preview.
  *
  * Behaviour:
  * - While ANY tool is running → forced expanded with spinner
@@ -43,15 +45,11 @@ fun CollapsibleToolCards(
     val allSuccess = toolCalls.all { it.success == true }
     val anyFailed = toolCalls.any { it.success == false }
 
-    // Auto-expand while running, collapse when done (user can toggle)
     var userExpanded by remember { mutableStateOf(true) }
     val isExpanded = anyRunning || userExpanded
 
-    // Reset userExpanded when tools finish
     LaunchedEffect(anyRunning) {
-        if (!anyRunning) {
-            userExpanded = false
-        }
+        if (!anyRunning) userExpanded = false
     }
 
     val arrowRotation by animateFloatAsState(
@@ -62,55 +60,44 @@ fun CollapsibleToolCards(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        shape = MaterialTheme.shapes.medium
+        color = MaterialTheme.colorScheme.surface,
+        shape = ClawShapes.card
     ) {
         Column {
-            // ── Collapsed header ──────────────────────────────────────
+            // ── Header ──────────────────────────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(enabled = !anyRunning) { userExpanded = !userExpanded }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = ClawSpacing.md, vertical = ClawSpacing.sm + 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Status icon
                 when {
-                    anyRunning -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    allSuccess -> {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    anyFailed -> {
-                        Icon(
-                            Icons.Default.Error,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
+                    anyRunning -> CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    allSuccess -> Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = Success
+                    )
+                    anyFailed -> Icon(
+                        Icons.Default.Error,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(Modifier.width(ClawSpacing.sm))
 
-                // Lightning bolt + count
-                Text(
-                    text = "⚡",
-                    fontSize = 14.sp
-                )
-                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = "⚡", fontSize = 13.sp)
+                Spacer(Modifier.width(4.dp))
 
-                // Summary text
                 Text(
                     text = if (anyRunning) {
                         val runningNames = toolCalls.filter { it.isRunning }
@@ -126,28 +113,31 @@ fun CollapsibleToolCards(
                     modifier = Modifier.weight(1f)
                 )
 
-                // Expand arrow (hidden while running)
                 if (!anyRunning) {
                     Icon(
                         Icons.Default.ExpandMore,
                         contentDescription = if (isExpanded) "收起" else "展开",
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(18.dp)
                             .rotate(arrowRotation),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
             }
 
-            // ── Expanded detail ───────────────────────────────────────
+            // ── Expanded detail ──────────────────────────────────────────
             AnimatedVisibility(
                 visible = isExpanded,
                 enter = expandVertically(animationSpec = tween(200)) + fadeIn(tween(150)),
                 exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(100))
             ) {
                 Column(
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.padding(
+                        start = ClawSpacing.md,
+                        end = ClawSpacing.md,
+                        bottom = ClawSpacing.sm
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(ClawSpacing.xs)
                 ) {
                     toolCalls.forEach { tc ->
                         ToolDetailItem(
@@ -163,7 +153,6 @@ fun CollapsibleToolCards(
 
 /**
  * Single tool detail row inside the expanded section.
- * Shows: status icon | friendly name | param summary | result preview
  */
 @Composable
 fun ToolDetailItem(
@@ -178,67 +167,57 @@ fun ToolDetailItem(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         color = when {
-            toolCall.isRunning -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
-            toolCall.success == true -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            toolCall.isRunning -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+            toolCall.success == true -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
         },
-        shape = MaterialTheme.shapes.small
+        shape = ClawShapes.cardSmall
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
+        Column(modifier = Modifier.padding(ClawSpacing.sm + 2.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Status indicator
                 when {
-                    toolCall.isRunning -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 1.5.dp
-                        )
-                    }
-                    toolCall.success == true -> {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    else -> {
-                        Icon(
-                            Icons.Default.Error,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
+                    toolCall.isRunning -> CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 1.5.dp
+                    )
+                    toolCall.success == true -> Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = Success
+                    )
+                    else -> Icon(
+                        Icons.Default.Error,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
                 }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(Modifier.width(6.dp))
 
-                // Tool icon
                 Icon(
                     info.icon,
                     contentDescription = null,
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(12.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(Modifier.width(4.dp))
 
-                // Friendly name
                 Text(
                     text = info.displayName,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // Param summary (if available)
                 val paramText = toolCall.input?.let { input ->
                     info.paramSummary(input.mapValues { (_, v) -> v.toString().trim('"') })
                 }
                 if (!paramText.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = paramText,
                         style = MaterialTheme.typography.bodySmall,
@@ -252,9 +231,8 @@ fun ToolDetailItem(
                 }
             }
 
-            // Result preview (completed only)
             if (!toolCall.isRunning && toolCall.result != null) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = toolCall.result.take(200).let {
                         if (toolCall.result.length > 200) "$it…" else it

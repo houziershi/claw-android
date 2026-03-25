@@ -14,11 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.openclaw.agent.ui.components.AssistantAvatar
+import com.openclaw.agent.ui.theme.ClawShapes
+import com.openclaw.agent.ui.theme.ClawSpacing
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -55,7 +54,6 @@ fun ChatScreen(
     var isListening by remember { mutableStateOf(false) }
     var hasAudioPermission by remember { mutableStateOf(false) }
 
-    // SpeechRecognizer kept across recompositions, destroyed on leave
     val speechRecognizer = remember {
         SpeechRecognizer.createSpeechRecognizer(context)
     }
@@ -63,13 +61,11 @@ fun ChatScreen(
         onDispose { speechRecognizer.destroy() }
     }
 
-    // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasAudioPermission = granted
         if (granted) {
-            // Permission just granted – start listening immediately
             startListening(speechRecognizer, context, onResult = { result ->
                 inputText = result
                 isListening = false
@@ -80,7 +76,6 @@ fun ChatScreen(
         }
     }
 
-    // Helper: kick off recognition
     fun beginVoiceInput() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) return
         if (hasAudioPermission) {
@@ -115,10 +110,37 @@ fun ChatScreen(
         }
     }
 
+    // Model name from last message for TopBar badge
+    val lastModel = remember(messages) {
+        messages.lastOrNull { it.model != null }?.model
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Chat", maxLines = 1) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(ClawSpacing.sm)
+                    ) {
+                        Text("Chat", maxLines = 1)
+                        if (!lastModel.isNullOrBlank()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = ClawShapes.chip
+                            ) {
+                                Text(
+                                    text = lastModel
+                                        .removePrefix("claude-")
+                                        .replace(Regex("-\\d{8}$"), ""),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -133,7 +155,6 @@ fun ChatScreen(
                 .padding(padding)
                 .imePadding()
         ) {
-            // Build structured ChatItems from raw messages
             val chatItems = remember(messages, showToolCalls) {
                 ChatItemBuilder.build(messages, showToolCalls)
             }
@@ -144,20 +165,20 @@ fun ChatScreen(
                     .weight(1f)
                     .fillMaxWidth(),
                 state = listState,
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(horizontal = ClawSpacing.lg, vertical = ClawSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(ClawSpacing.groupSpacing)
             ) {
                 items(chatItems.size, key = { chatItems[it].key }) { index ->
                     when (val item = chatItems[index]) {
-                        is ChatItem.DateSeparator -> {
-                            DateDivider(date = item.date)
-                        }
-                        is ChatItem.MessageGroup -> {
-                            MessageGroupView(group = item)
-                        }
-                        is ChatItem.ToolCallsBlock -> {
-                            // Reserved for future: historical tool calls from DB
-                        }
+                        is ChatItem.DateSeparator -> DateDivider(
+                            date = item.date,
+                            modifier = Modifier.animateItem()
+                        )
+                        is ChatItem.MessageGroup -> MessageGroupView(
+                            group = item,
+                            modifier = Modifier.animateItem()
+                        )
+                        is ChatItem.ToolCallsBlock -> { /* reserved */ }
                     }
                 }
 
@@ -171,23 +192,31 @@ fun ChatScreen(
                     }
                 }
 
-                // Streaming bubble
+                // Streaming bubble (with avatar layout for consistency)
                 if (isStreaming && streamingText.isNotEmpty()) {
                     item(key = "streaming") {
-                        MessageBubble(
-                            content = streamingText,
-                            isUser = false,
-                            isStreaming = true
-                        )
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            AssistantAvatar()
+                            Spacer(Modifier.width(ClawSpacing.avatarGap))
+                            Column(modifier = Modifier.weight(1f)) {
+                                MessageBubble(
+                                    content = streamingText,
+                                    isUser = false,
+                                    isStreaming = true
+                                )
+                            }
+                        }
                     }
                 }
 
-                // Thinking indicator (three-dot bounce)
+                // Thinking indicator (three-dot pulse)
                 if (isStreaming && streamingText.isEmpty() && activeToolCalls.isEmpty()) {
                     item(key = "thinking") {
-                        ReadingIndicator(
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            AssistantAvatar()
+                            Spacer(Modifier.width(ClawSpacing.avatarGap))
+                            ReadingIndicator()
+                        }
                     }
                 }
             }
@@ -199,7 +228,7 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = ClawSpacing.md, vertical = ClawSpacing.sm),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -208,15 +237,13 @@ fun ChatScreen(
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             style = MaterialTheme.typography.bodySmall
                         )
-                        TextButton(
-                            onClick = { viewModel.retryLastMessage() }
-                        ) {
+                        TextButton(onClick = { viewModel.retryLastMessage() }) {
                             Icon(
                                 Icons.Default.Refresh,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(Modifier.width(4.dp))
                             Text("重试")
                         }
                     }
@@ -224,73 +251,27 @@ fun ChatScreen(
             }
 
             // Input bar
-            Surface(
-                tonalElevation = 3.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    OutlinedTextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Message...") },
-                        maxLines = 5,
-                        enabled = !isStreaming,
-                        shape = MaterialTheme.shapes.extraLarge
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // 🎤 Microphone button
-                    IconButton(
-                        onClick = {
-                            if (isListening) {
-                                speechRecognizer.stopListening()
-                                isListening = false
-                            } else {
-                                beginVoiceInput()
-                            }
-                        },
-                        enabled = !isStreaming
-                    ) {
-                        Icon(
-                            imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
-                            contentDescription = if (isListening) "Stop recording" else "Voice input",
-                            tint = if (isListening)
-                                MaterialTheme.colorScheme.error
-                            else
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            ChatInputBar(
+                inputText = inputText,
+                onInputChange = { inputText = it },
+                isStreaming = isStreaming,
+                isListening = isListening,
+                onSend = {
+                    if (inputText.isNotBlank()) {
+                        viewModel.sendMessage(inputText.trim())
+                        inputText = ""
                     }
-
-                    // Send / Stop button
-                    if (isStreaming) {
-                        FilledIconButton(
-                            onClick = { viewModel.stopGeneration() },
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Icon(Icons.Default.Stop, "Stop")
-                        }
+                },
+                onStop = { viewModel.stopGeneration() },
+                onVoiceToggle = {
+                    if (isListening) {
+                        speechRecognizer.stopListening()
+                        isListening = false
                     } else {
-                        FilledIconButton(
-                            onClick = {
-                                if (inputText.isNotBlank()) {
-                                    viewModel.sendMessage(inputText.trim())
-                                    inputText = ""
-                                }
-                            },
-                            enabled = inputText.isNotBlank()
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, "Send")
-                        }
+                        beginVoiceInput()
                     }
                 }
-            }
+            )
         }
 
         // ── Tool Output BottomSheet ──────────────────────────────────────────
@@ -323,19 +304,12 @@ private fun startListening(
         override fun onBufferReceived(buffer: ByteArray?) {}
         override fun onEndOfSpeech() {}
 
-        override fun onError(error: Int) {
-            onError()
-        }
+        override fun onError(error: Int) { onError() }
 
         override fun onResults(results: Bundle?) {
-            val matches = results
-                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             val text = matches?.firstOrNull().orEmpty()
-            if (text.isNotBlank()) {
-                onResult(text)
-            } else {
-                onError()
-            }
+            if (text.isNotBlank()) onResult(text) else onError()
         }
 
         override fun onPartialResults(partialResults: Bundle?) {}

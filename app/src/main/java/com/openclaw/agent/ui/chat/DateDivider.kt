@@ -8,6 +8,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.openclaw.agent.ui.theme.Neutral500
+import com.openclaw.agent.ui.theme.Neutral600
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -31,17 +33,17 @@ fun DateDivider(
     ) {
         HorizontalDivider(
             modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            color = Neutral600.copy(alpha = 0.5f)
         )
         Text(
             text = label,
             modifier = Modifier.padding(horizontal = 12.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            color = Neutral500
         )
         HorizontalDivider(
             modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            color = Neutral600.copy(alpha = 0.5f)
         )
     }
 }

@@ -19,9 +19,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.openclaw.agent.ui.theme.ClawShapes
+import com.openclaw.agent.ui.theme.ClawSpacing
+import com.openclaw.agent.ui.theme.LocalClawColors
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.ext.tables.TablePlugin
@@ -34,59 +38,72 @@ fun MessageBubble(
     content: String,
     isUser: Boolean,
     isError: Boolean = false,
-    isStreaming: Boolean = false
+    isStreaming: Boolean = false,
+    isFirstInGroup: Boolean = true,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val clawColors = LocalClawColors.current
     val alignment = if (isUser) Alignment.End else Alignment.Start
+
+    val shape = when {
+        isError -> ClawShapes.bubbleContinue
+        isUser -> if (isFirstInGroup) ClawShapes.bubbleUser else ClawShapes.bubbleContinue
+        else -> if (isFirstInGroup) ClawShapes.bubbleBot else ClawShapes.bubbleContinue
+    }
+
     val containerColor = when {
         isError -> MaterialTheme.colorScheme.errorContainer
-        isUser -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        isUser -> clawColors.userBubble
+        else -> clawColors.botBubble
     }
-    val textColor = when {
+
+    val textColor: Color = when {
         isError -> MaterialTheme.colorScheme.onErrorContainer
-        isUser -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        isUser -> clawColors.userBubbleText
+        else -> clawColors.botBubbleText
     }
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = alignment
     ) {
         Surface(
             color = containerColor,
-            shape = MaterialTheme.shapes.large,
+            shape = shape,
             modifier = Modifier
-                .widthIn(max = 320.dp)
-                .clip(MaterialTheme.shapes.large)
+                .fillMaxWidth(0.8f)
+                .clip(shape)
                 .combinedClickable(
                     onClick = {},
-                    onLongClick = {
-                        // Long press to copy full text
-                        copyToClipboard(context, content)
-                    }
+                    onLongClick = { copyToClipboard(context, content) }
                 )
         ) {
             if (isUser) {
-                // User messages: selectable text
                 SelectionContainer {
                     Text(
                         text = content,
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(
+                            horizontal = ClawSpacing.bubbleHPadding,
+                            vertical = ClawSpacing.bubbleVPadding
+                        ),
                         color = textColor,
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
             } else {
                 Column {
-                    // Assistant messages: selectable TextView with Markdown
                     MarkdownText(
                         markdown = content,
-                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
+                        modifier = Modifier.padding(
+                            start = ClawSpacing.bubbleHPadding,
+                            end = ClawSpacing.bubbleHPadding,
+                            top = ClawSpacing.bubbleVPadding,
+                            bottom = 4.dp
+                        ),
                         color = textColor,
                         selectable = true
                     )
-                    // Action buttons row
                     if (!isStreaming && content.isNotBlank()) {
                         Row(
                             modifier = Modifier
@@ -94,7 +111,6 @@ fun MessageBubble(
                                 .padding(end = 4.dp, bottom = 2.dp),
                             horizontalArrangement = Arrangement.spacedBy(0.dp)
                         ) {
-                            // Copy button
                             IconButton(
                                 onClick = { copyToClipboard(context, content) },
                                 modifier = Modifier.size(32.dp)
@@ -103,13 +119,12 @@ fun MessageBubble(
                                     Icons.Default.ContentCopy,
                                     contentDescription = "Copy",
                                     modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    tint = clawColors.botBubbleText.copy(alpha = 0.5f)
                                 )
                             }
-                            // TTS button
                             TtsButton(
                                 text = content,
-                                modifier = Modifier
+                                iconTint = clawColors.botBubbleText.copy(alpha = 0.5f)
                             )
                         }
                     }
@@ -121,7 +136,6 @@ fun MessageBubble(
 
 private fun copyToClipboard(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    // Strip markdown for clean clipboard text
     val cleanText = text
         .replace(Regex("[*_~`#>|]"), "")
         .replace(Regex("\\[([^]]+)]\\([^)]+\\)"), "$1")
@@ -134,6 +148,7 @@ private fun copyToClipboard(context: Context, text: String) {
 @Composable
 private fun TtsButton(
     text: String,
+    iconTint: Color,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -187,7 +202,7 @@ private fun TtsButton(
             if (isSpeaking) Icons.Default.Stop else Icons.Default.VolumeUp,
             contentDescription = if (isSpeaking) "Stop" else "Read aloud",
             modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            tint = iconTint
         )
     }
 }
@@ -196,7 +211,7 @@ private fun TtsButton(
 fun MarkdownText(
     markdown: String,
     modifier: Modifier = Modifier,
-    color: androidx.compose.ui.graphics.Color,
+    color: Color,
     selectable: Boolean = false
 ) {
     val context = LocalContext.current

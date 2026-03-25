@@ -4,59 +4,85 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFFF6B35),
+data class ClawExtraColors(
+    val userBubble: Color,
+    val userBubbleText: Color,
+    val botBubble: Color,
+    val botBubbleText: Color,
+    val success: Color,
+    val warning: Color,
+    val info: Color,
+)
+
+val LocalClawColors = staticCompositionLocalOf {
+    ClawExtraColors(
+        userBubble = UserBubble,
+        userBubbleText = UserBubbleText,
+        botBubble = BotBubble,
+        botBubbleText = BotBubbleText,
+        success = Success,
+        warning = Warning,
+        info = Info,
+    )
+}
+
+private val ClawDarkColorScheme = darkColorScheme(
+    primary = Claw400,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFF8B3A1A),
-    onPrimaryContainer = Color(0xFFFFDBC9),
-    secondary = Color(0xFFFFB088),
-    onSecondary = Color(0xFF4A2800),
-    secondaryContainer = Color(0xFF6A3C00),
-    onSecondaryContainer = Color(0xFFFFDBC9),
-    tertiary = Color(0xFF9ECBFF),
-    background = Color(0xFF121212),
-    surface = Color(0xFF1E1E1E),
-    surfaceVariant = Color(0xFF2A2A2A),
-    surfaceContainerHighest = Color(0xFF333333),
-    onBackground = Color(0xFFE6E1E5),
-    onSurface = Color(0xFFE6E1E5),
-    onSurfaceVariant = Color(0xFFCAC4D0),
-    outline = Color(0xFF49454F),
-    outlineVariant = Color(0xFF333333),
-    error = Color(0xFFFFB4AB),
+    primaryContainer = Claw700,
+    onPrimaryContainer = Claw100,
+    secondary = Claw300,
+    onSecondary = Color.White,
+    secondaryContainer = Neutral750,
+    onSecondaryContainer = Neutral200,
+    background = Neutral900,
+    surface = Neutral850,
+    surfaceVariant = Neutral800,
+    surfaceContainerHighest = Neutral750,
+    onBackground = Neutral200,
+    onSurface = Neutral200,
+    onSurfaceVariant = Neutral400,
+    outline = Neutral700,
+    outlineVariant = Neutral700,
+    error = Error,
     errorContainer = Color(0xFF93000A),
     onError = Color(0xFF690005),
     onErrorContainer = Color(0xFFFFDAD6),
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFFE05500),
+private val ClawLightColorScheme = lightColorScheme(
+    primary = Color(0xFFE65100),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFDBC9),
+    primaryContainer = Color(0xFFFFCC80),
     onPrimaryContainer = Color(0xFF331200),
     secondary = Color(0xFF8B5E3C),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFFFDBC9),
-    onSecondaryContainer = Color(0xFF331200),
-    tertiary = Color(0xFF006590),
-    background = Color(0xFFFFFBFF),
-    surface = Color(0xFFFFFBFF),
-    surfaceVariant = Color(0xFFF5F0EC),
-    surfaceContainerHighest = Color(0xFFE8E0DA),
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    onSurfaceVariant = Color(0xFF49454F),
-    outline = Color(0xFF79747E),
-    outlineVariant = Color(0xFFCAC4D0),
+    secondaryContainer = LightSurfaceAlt,
+    onSecondaryContainer = LightText,
+    background = LightBackground,
+    surface = LightSurface,
+    surfaceVariant = LightSurfaceAlt,
+    surfaceContainerHighest = LightBorder,
+    onBackground = LightText,
+    onSurface = LightText,
+    onSurfaceVariant = LightTextSecondary,
+    outline = LightBorder,
+    outlineVariant = LightBorder,
+    error = Error,
+    errorContainer = Color(0xFFFFDAD6),
+    onError = Color.White,
+    onErrorContainer = Color(0xFF93000A),
 )
 
 @Composable
 fun ClawTheme(
     themeMode: String = "system",
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val darkTheme = when (themeMode) {
@@ -70,13 +96,37 @@ fun ClawTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        darkTheme -> ClawDarkColorScheme
+        else -> ClawLightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography(),
-        content = content
-    )
+    val extraColors = if (darkTheme) {
+        ClawExtraColors(
+            userBubble = UserBubble,
+            userBubbleText = UserBubbleText,
+            botBubble = BotBubble,
+            botBubbleText = BotBubbleText,
+            success = Success,
+            warning = Warning,
+            info = Info,
+        )
+    } else {
+        ClawExtraColors(
+            userBubble = LightUserBubble,
+            userBubbleText = Color.White,
+            botBubble = LightBotBubble,
+            botBubbleText = LightBotBubbleText,
+            success = Success,
+            warning = Warning,
+            info = Info,
+        )
+    }
+
+    CompositionLocalProvider(LocalClawColors provides extraColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = ClawTypography,
+            content = content
+        )
+    }
 }
