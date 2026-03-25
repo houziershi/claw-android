@@ -116,6 +116,7 @@ object AppModule {
         registry.register(VolumeTool(context))
         registry.register(AlarmTool(context))
         registry.register(BluetoothTool(context))
+        registry.register(DndTool(context))
 
         // Web tools
         registry.register(WebSearchTool(okHttpClient))
@@ -131,11 +132,14 @@ object AppModule {
         registry.register(FlashlightTool(context))
         registry.register(AppLauncherTool(context))
         registry.register(IntentTool(context))
+        registry.register(BrightnessTool(context))
+        registry.register(WiFiTool(context))
 
         // PIM tools (permissions already declared)
         registry.register(ContactsTool(context))
         registry.register(CalendarTool(context))
         registry.register(LocationTool(context))
+        registry.register(MediaTool(context))
 
         // Mijia smart home tools
         registry.register(MijiaListDevicesTool(mijiaApiClient))
