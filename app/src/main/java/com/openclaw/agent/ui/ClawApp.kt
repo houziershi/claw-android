@@ -17,6 +17,7 @@ import androidx.navigation.navArgument
 import com.openclaw.agent.ui.chat.ChatScreen
 import com.openclaw.agent.ui.memory.MemoryScreen
 import com.openclaw.agent.ui.mijia.MijiaLoginActivity
+import com.openclaw.agent.ui.web.WebLoginActivity
 import com.openclaw.agent.ui.sessions.SessionListScreen
 import com.openclaw.agent.ui.settings.SettingsScreen
 import com.openclaw.agent.ui.skills.SkillsScreen
@@ -111,6 +112,12 @@ fun ClawApp() {
                 onBack = { navController.popBackStack() },
                 onMijiaLogin = {
                     context.startActivity(Intent(context, MijiaLoginActivity::class.java))
+                },
+                onWebLogin = { site ->
+                    context.startActivity(
+                        Intent(context, WebLoginActivity::class.java)
+                            .putExtra(WebLoginActivity.EXTRA_SITE, site)
+                    )
                 }
             )
         }

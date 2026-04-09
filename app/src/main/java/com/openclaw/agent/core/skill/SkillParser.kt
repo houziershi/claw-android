@@ -32,14 +32,22 @@ object SkillParser {
 
     fun parse(content: String, fileName: String = "unknown"): Skill? {
         try {
-            val lines = content.lines()
+            val frontmatter = parseFrontmatter(content)
+            val markdownContent = stripFrontmatter(content)
+            val lines = markdownContent.lines()
             if (lines.isEmpty()) return null
 
-            var name = ""
-            var description = ""
-            var triggers = mutableListOf<String>()
+            var name = frontmatter["name"]?.firstOrNull()?.trim().orEmpty()
+            var description = frontmatter["description"]?.firstOrNull()?.trim().orEmpty()
+            val triggers = frontmatter["triggers"]
+                ?.map { it.trim().lowercase() }
+                ?.toMutableList()
+                ?: mutableListOf()
             var systemPrompt = StringBuilder()
-            var requiredTools = mutableListOf<String>()
+            val requiredTools = frontmatter["required_tools"]
+                ?.map { it.trim() }
+                ?.toMutableList()
+                ?: mutableListOf()
 
             var currentSection = ""
 
@@ -48,7 +56,9 @@ object SkillParser {
 
                 // H1 = skill name
                 if (trimmed.startsWith("# ") && !trimmed.startsWith("## ")) {
-                    name = trimmed.removePrefix("# ").trim()
+                    if (name.isEmpty()) {
+                        name = trimmed.removePrefix("# ").trim()
+                    }
                     currentSection = "header"
                     continue
                 }
@@ -105,5 +115,51 @@ object SkillParser {
             Log.e(TAG, "Failed to parse skill: $fileName", e)
             return null
         }
+    }
+
+    private fun stripFrontmatter(content: String): String {
+        val lines = content.lines()
+        if (lines.isEmpty() || lines.first().trim() != "---") return content
+
+        for (index in 1 until lines.size) {
+            if (lines[index].trim() == "---") {
+                return lines.drop(index + 1).joinToString("\n")
+            }
+        }
+
+        return content
+    }
+
+    private fun parseFrontmatter(content: String): Map<String, List<String>> {
+        val lines = content.lines()
+        if (lines.isEmpty() || lines.first().trim() != "---") return emptyMap()
+
+        val result = linkedMapOf<String, MutableList<String>>()
+        var currentKey: String? = null
+
+        for (index in 1 until lines.size) {
+            val rawLine = lines[index]
+            val trimmed = rawLine.trim()
+            if (trimmed == "---") break
+            if (trimmed.isEmpty()) continue
+
+            if (!rawLine.startsWith(" ") && trimmed.contains(":")) {
+                val key = trimmed.substringBefore(":").trim().lowercase()
+                val value = trimmed.substringAfter(":", "").trim()
+                currentKey = key
+                if (value.isNotEmpty()) {
+                    result.getOrPut(key) { mutableListOf() }.add(value)
+                } else {
+                    result.getOrPut(key) { mutableListOf() }
+                }
+                continue
+            }
+
+            if (trimmed.startsWith("- ") && currentKey != null) {
+                result.getOrPut(currentKey) { mutableListOf() }.add(trimmed.removePrefix("- ").trim())
+            }
+        }
+
+        return result
     }
 }

@@ -16,7 +16,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SettingsStore @Inject constructor(
+open class SettingsStore @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataStore: DataStore<Preferences>
 ) {
@@ -46,7 +46,7 @@ class SettingsStore @Inject constructor(
     }
 
     // Encrypted API key operations (synchronous, backed by EncryptedSharedPreferences)
-    fun getApiKey(): String {
+    open fun getApiKey(): String {
         val saved = encryptedPrefs.getString(PREF_API_KEY, "") ?: ""
         return saved.ifBlank { DEFAULT_API_KEY }
     }
@@ -57,7 +57,7 @@ class SettingsStore @Inject constructor(
 
     fun hasApiKey(): Boolean = getApiKey().isNotBlank()
 
-    fun getBaseUrl(): String {
+    open fun getBaseUrl(): String {
         val saved = encryptedPrefs.getString(PREF_API_BASE_URL, "") ?: ""
         return saved.ifBlank { DEFAULT_BASE_URL }
     }
@@ -67,7 +67,7 @@ class SettingsStore @Inject constructor(
     }
 
     // Model selection
-    val selectedModelFlow: Flow<String> = dataStore.data.map { prefs ->
+    open val selectedModelFlow: Flow<String> = dataStore.data.map { prefs ->
         prefs[Keys.SELECTED_MODEL] ?: DEFAULT_MODEL
     }
 
@@ -104,7 +104,7 @@ class SettingsStore @Inject constructor(
     }
 
     // Show tool calls in chat
-    val showToolCallsFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+    open val showToolCallsFlow: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[Keys.SHOW_TOOL_CALLS] ?: false
     }
 

@@ -4,7 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openclaw.agent.core.runtime.AgentEvent
-import com.openclaw.agent.core.runtime.AgentRuntime
+import com.openclaw.agent.core.runtime.ChatRuntime
 import com.openclaw.agent.core.session.SessionManager
 import com.openclaw.agent.data.db.entities.MessageEntity
 import com.openclaw.agent.data.preferences.SettingsStore
@@ -29,7 +29,7 @@ data class ToolCallUiState(
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    private val agentRuntime: AgentRuntime,
+    private val agentRuntime: ChatRuntime,
     private val sessionManager: SessionManager,
     private val settingsStore: SettingsStore
 ) : ViewModel() {

@@ -41,6 +41,7 @@ android {
         }
         debug {
             isDebuggable = true
+            enableAndroidTestCoverage = true
         }
     }
 
@@ -137,9 +138,12 @@ dependencies {
     testImplementation(libs.kotlinx.serialization.json)
 
     // Testing - Instrumented tests
+    androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.truth)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

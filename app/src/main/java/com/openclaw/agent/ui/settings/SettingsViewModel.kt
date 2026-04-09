@@ -36,7 +36,8 @@ class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val mijiaAuthStore: MijiaAuthStore,
     private val mijiaApiClient: MijiaApiClient,
-    private val mijiaTokenRefresher: MijiaTokenRefresher
+    private val mijiaTokenRefresher: MijiaTokenRefresher,
+    private val cookieVault: com.openclaw.agent.core.web.cookie.CookieVault
 ) : ViewModel() {
 
     val selectedModel: Flow<String> = settingsStore.selectedModelFlow
@@ -209,5 +210,18 @@ class SettingsViewModel @Inject constructor(
 
     fun resetTestState() {
         _connectionTestState.value = ConnectionTestState.Idle
+    }
+
+    // ── Site Accounts (Phase 3) ────────────────────────────────────
+    private val _siteAccounts = MutableStateFlow(cookieVault.getLoggedInSites())
+    val siteAccounts: StateFlow<List<String>> = _siteAccounts.asStateFlow()
+
+    fun refreshSiteAccounts() {
+        _siteAccounts.value = cookieVault.getLoggedInSites()
+    }
+
+    fun logoutSite(site: String) {
+        cookieVault.logout(site)
+        refreshSiteAccounts()
     }
 }

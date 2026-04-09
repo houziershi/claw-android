@@ -39,7 +39,7 @@ class AgentRuntime @Inject constructor(
     private val contextCompactor: ContextCompactor,
     private val apiKeyManager: ApiKeyManager,
     private val userHookRegistry: UserHookRegistry
-) {
+) : ChatRuntime {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private val hookEngine by lazy {
@@ -62,13 +62,14 @@ class AgentRuntime @Inject constructor(
      * Process a user message and stream back AgentEvents.
      * Implements the function-calling loop: LLM → tool_use → tool_result → LLM → ...
      */
-    fun chat(
+    override fun chat(
         sessionId: String,
         userMessage: String,
         model: String,
         apiKey: String,
-        baseUrl: String = "https://api.anthropic.com/v1/messages"
+        baseUrl: String
     ): Flow<AgentEvent> = flow {
+
         // Phase 7.3: API key rotation
         apiKeyManager.reset()
         val primaryKeyEntry = apiKeyManager.getCurrentKey()

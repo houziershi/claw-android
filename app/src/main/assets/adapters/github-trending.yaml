@@ -1,0 +1,32 @@
+site: github
+name: trending
+description: GitHub trending repositories (via unofficial API)
+strategy: public
+browser: false
+
+args:
+  language:
+    type: string
+    default: ""
+    description: Programming language filter (e.g. kotlin, python)
+  limit:
+    type: int
+    default: 10
+    description: Number of repos
+
+pipeline:
+  - fetch:
+      url: https://api.gitterapp.com/repositories?language=${{ args.language }}&since=daily
+
+  - map:
+      rank: ${{ index + 1 }}
+      name: ${{ item.name }}
+      author: ${{ item.author }}
+      description: ${{ item.description }}
+      stars: ${{ item.stars }}
+      language: ${{ item.language }}
+      url: ${{ item.url }}
+
+  - limit: ${{ args.limit }}
+
+columns: [rank, author, name, stars, language, description]

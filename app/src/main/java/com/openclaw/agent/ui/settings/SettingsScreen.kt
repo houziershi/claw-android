@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -31,6 +32,7 @@ import com.openclaw.agent.ui.theme.ClawSpacing
 fun SettingsScreen(
     onBack: () -> Unit,
     onMijiaLogin: () -> Unit = {},
+    onWebLogin: (String) -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val selectedModel by viewModel.selectedModel.collectAsState(initial = "")
@@ -42,12 +44,13 @@ fun SettingsScreen(
     val mijiaLoggedIn by viewModel.mijiaLoggedIn.collectAsState()
     val mijiaAuthChecking by viewModel.mijiaAuthChecking.collectAsState()
 
-    // Refresh Mijia login state when screen resumes (e.g. after LoginActivity)
+    // Refresh login state when screen resumes (e.g. after WebLoginActivity)
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 viewModel.refreshMijiaLoginState()
+                viewModel.refreshSiteAccounts()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -87,7 +90,9 @@ fun SettingsScreen(
                 OutlinedTextField(
                     value = apiKeyInput,
                     onValueChange = { apiKeyInput = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("settings_api_key"),
                     label = { Text("API Key") },
                     placeholder = { Text("sk-...") },
                     singleLine = true,
@@ -106,7 +111,9 @@ fun SettingsScreen(
                 OutlinedTextField(
                     value = baseUrlInput,
                     onValueChange = { baseUrlInput = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("settings_base_url"),
                     label = { Text("API Base URL") },
                     placeholder = { Text("https://api.anthropic.com/v1/messages") },
                     singleLine = true
@@ -118,7 +125,9 @@ fun SettingsScreen(
                             if (apiKeyInput != apiKey) viewModel.saveApiKey(apiKeyInput)
                             if (baseUrlInput != baseUrl) viewModel.saveBaseUrl(baseUrlInput)
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("settings_save")
                     ) {
                         Text("Save")
                     }
@@ -281,6 +290,64 @@ fun SettingsScreen(
                             Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(ClawSpacing.xs))
                             Text("登录")
+                        }
+                    }
+                }
+            }
+
+            // ── Web Site Accounts (Phase 3) ──────────────────────────────────
+            SettingsSection(title = "站点账号") {
+                Text(
+                    "登录网站账号后，AI 助手可以获取 B站、知乎、微博等平台的数据。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(ClawSpacing.sm))
+                val siteAccounts by viewModel.siteAccounts.collectAsState()
+                com.openclaw.agent.core.web.cookie.SiteConfig.ALL.forEach { site ->
+                    val loggedIn = siteAccounts.contains(site.site)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = ClawSpacing.xs),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "${site.icon} ${site.displayName}",
+                                modifier = Modifier.testTag("site_${site.site}_title"),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                if (loggedIn) "已登录" else "未登录",
+                                modifier = Modifier.testTag("site_${site.site}_status"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (loggedIn) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (loggedIn) {
+                            TextButton(
+                                onClick = { viewModel.logoutSite(site.site) },
+                                modifier = Modifier.testTag("site_${site.site}_logout"),
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(ClawSpacing.xs))
+                                Text("退出")
+                            }
+                        } else {
+                            TextButton(
+                                onClick = { onWebLogin(site.site) },
+                                modifier = Modifier.testTag("site_${site.site}_login")
+                            ) {
+                                Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(ClawSpacing.xs))
+                                Text("登录")
+                            }
                         }
                     }
                 }
